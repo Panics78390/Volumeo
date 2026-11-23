@@ -145,16 +145,30 @@ def test_triposg_generate_with_projection_colors(monkeypatch, car_photo):
 
     calls = _fake_triposg(monkeypatch)
     monkeypatch.setattr(T.settings, "triposg_colors", "projection")
+    seen = {}
+    real_photo_colors = T.photo_colors
+
+    def spy(image, fit, mesh, fallback, symmetry, seed=0):
+        seen["mesh"], seen["symmetry"] = mesh.copy(), symmetry
+        return real_photo_colors(image, fit, mesh, fallback, symmetry, seed=seed)
+
+    monkeypatch.setattr(T, "photo_colors", spy)
     msgs = []
     res = T.TripoSGGenerator().generate(car_photo, GenerationOptions(mc_resolution=160, seed=0),
                                         lambda f, m: msgs.append((f, m)))
     assert calls["octree"] == (8, 8) and calls["path"] == f"/cache/{T.settings.triposg_model}"
     assert any("étape 3/3" in m for _, m in msgs)
-    assert res.info["colors"] == "projection" and res.info["silhouette_iou"] > 0.9
+    assert res.info["colors"] == "photo+projection" and res.info["symmetry"] and res.info["silhouette_iou"] > 0.9
     assert np.allclose(res.mesh.bounding_box.centroid, 0, atol=1e-6)
     assert res.mesh.is_watertight
     front, back = _front_back_colors(res)
     assert front[0] > front[2], "l'avant (rouge sur la photo) est rouge"
+    # Le plan de symétrie suit la forme dans son repère final : le reflet retombe sur la forme.
+    v = seen["mesh"].vertices
+    normal, point = seen["symmetry"]
+    mirrored = v - 2 * ((v - point) @ normal)[:, None] * normal
+    from scipy.spatial import cKDTree
+    assert cKDTree(v).query(mirrored)[0].mean() < 0.005 * np.ptp(v, axis=0).max()
     assert res.mesh.visual.vertex_colors.shape == (len(res.mesh.vertices), 4)
 
 
@@ -182,10 +196,60 @@ def test_triposg_generate_with_triposr_colors(monkeypatch, car_photo):
     monkeypatch.setattr(generators.REGISTRY["triposr"], "availability", classmethod(lambda cls: (True, "")))
     monkeypatch.setattr(generators, "get_generator", lambda name: FakeTripoSR())
     res = T.TripoSGGenerator().generate(car_photo, GenerationOptions(mc_resolution=160), lambda f, m: None)
-    assert res.info["colors"] == "triposr"
+    assert res.info["colors"] == "photo+triposr"
     front, back = _front_back_colors(res)
     assert front[0] > 0.6 and front[2] < 0.3, front
     assert back[2] > 0.6 and back[0] < 0.3, back
+
+
+def test_find_symmetry_on_car():
+    normal, center = T.find_symmetry(car_mesh().vertices)
+    assert np.allclose(np.abs(normal), [1, 0, 0]), "plan gauche / droite de la voiture"
+    assert abs(center[0]) < 0.02
+    # Une grosse caisse d'un seul côté, à l'avant : plus aucun plan de symétrie.
+    lin = np.linspace(-1, 1, 72)
+    grid = np.stack(np.meshgrid(lin, lin, lin, indexing="ij"), -1).reshape(-1, 3)
+    sdf = np.minimum(car_sdf(grid), _box(grid, [0.5, 0.1, 0.5], [0.2, 0.2, 0.2]))
+    v = measure.marching_cubes(-sdf.reshape(72, 72, 72), 0)[0]
+    assert T.find_symmetry(v) is None
+
+
+def _photo_of(mesh, fit, size=256):
+    """Photo de ``mesh`` (repère debout) selon ``fit`` : faces vues en rouge."""
+    cam = fit.to_camera(mesh.vertices)
+    im = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(im)
+    for f in mesh.faces[np.argsort(cam[mesh.faces].mean(1)[:, 2])]:
+        draw.polygon([((cam[i, 0] + 0.5) * (size - 1), (0.5 - cam[i, 1]) * (size - 1)) for i in f], fill=RED + (255,))
+    return im
+
+
+def test_photo_colors_visible_mirrored_and_hidden():
+    """La photo colle sur les faces vues ; le flanc caché copie son reflet ;
+    l'arrière et le dessous, invisibles même par symétrie, prennent le secours."""
+    mesh = car_mesh(64)
+    mesh.invert()  # normales vers l'extérieur, comme dans generate()
+    mesh.apply_transform(np.block([[T._rot_y(np.radians(YAW)), np.zeros((3, 1))], [np.zeros((1, 3)), 1]]))
+    fit = T.ViewFit(upright=np.eye(3), elevation=0.0, iou=1.0, scale=0.4, offset=np.zeros(2))
+    photo = _photo_of(mesh, fit)
+    green = lambda p: np.tile([0.0, 1.0, 0.0], (len(p), 1))  # noqa: E731
+    side_x = np.array([np.cos(np.radians(YAW)), 0, -np.sin(np.radians(YAW))])  # +X d'origine : flanc caché
+    head = np.array([np.sin(np.radians(YAW)), 0, np.cos(np.radians(YAW))])
+    n, v = mesh.vertex_normals, mesh.vertices
+    visible_side = n @ -side_x > 0.9
+    hidden_side = n @ side_x > 0.9
+    back = n @ -head > 0.9
+    bottom = n[:, 1] < -0.9
+    sym = (side_x, np.zeros(3))
+
+    c = T.photo_colors(photo, fit, mesh, green, sym)(v)
+    red = np.array(RED) / 255
+    assert np.abs(c[visible_side] - red).max(1).mean() < 0.05
+    assert np.abs(c[hidden_side] - red).max(1).mean() < 0.05, "reflet du flanc visible"
+    assert c[back][:, 1].mean() > 0.9 and c[bottom][:, 1].mean() > 0.9
+
+    plain = T.photo_colors(photo, fit, mesh, green)(v)
+    assert plain[hidden_side][:, 1].mean() > 0.9, "sans symétrie, le flanc caché prend le secours"
 
 
 def test_triposg_not_default_without_gpu(monkeypatch):

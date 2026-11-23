@@ -116,8 +116,12 @@ npm run dev          # http://localhost:5173, /api est relayé vers le port 8000
 TripoSG produit une forme sans couleur, dans le repère propre de l'objet. Volumeo :
 
 1. cherche la rotation (axe vertical, cap, hauteur de la caméra) dont la silhouette ressemble le plus à celle de la photo, pour tourner le modèle comme sur l'image ;
-2. si TripoSR est installé, le fait reconstruire le même objet en couleur, s'en sert pour départager les orientations ambiguës (avant ou arrière d'une voiture) et reprend ses couleurs, arrière compris ;
-3. sinon, projette la photo sur l'avant et l'arrière du modèle.
+2. si TripoSR est installé, le fait reconstruire le même objet en couleur et s'en sert pour départager les orientations ambiguës (avant ou arrière d'une voiture) ;
+3. colle les pixels nets de la photo sur les faces que l'objectif voit vraiment (test de profondeur, fondu selon l'angle) ;
+4. si la forme est symétrique (une voiture de gauche à droite, par exemple), colore le côté caché avec le reflet du côté visible ;
+5. pour le reste (l'arrière, le dessous), reprend les couleurs de TripoSR, ou à défaut une projection de la photo.
+
+En résolution Brouillon et Standard, TripoSG décode sa forme sur une grille 256³ ; la grille 512³, nettement plus lente, est réservée à la résolution Haute.
 
 ## Utilisation
 
@@ -243,7 +247,7 @@ cd backend
 python -m pytest
 ```
 
-52 tests couvrent le détourage, les préréglages, le remaillage, le bake, le pipeline complet image → maillage → GLB/OBJ/STL/FBX (relus avec trimesh, un lecteur FBX de test et `assimp` s'il est installé), l'API et la file d'attente, ainsi que les adaptateurs TripoSR et TripoSG (orientation selon la photo, reprise des couleurs) et la génération d'image depuis une description avec de faux modèles. Ils n'ont besoin ni de GPU ni de poids.
+54 tests couvrent le détourage, les préréglages, le remaillage, le bake, le pipeline complet image → maillage → GLB/OBJ/STL/FBX (relus avec trimesh, un lecteur FBX de test et `assimp` s'il est installé), l'API et la file d'attente, ainsi que les adaptateurs TripoSR et TripoSG (orientation selon la photo, symétrie, photo sur les faces visibles, reprise des couleurs) et la génération d'image depuis une description avec de faux modèles. Ils n'ont besoin ni de GPU ni de poids.
 
 ## Limites connues
 

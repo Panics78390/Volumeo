@@ -2,13 +2,14 @@
 
 # Volumeo
 
-Application web qui transforme une image (JPG, PNG, WebP) d'un objet, d'un personnage ou d'un véhicule en modèle 3D texturé, à visualiser dans le navigateur puis à télécharger en GLB, OBJ, STL ou FBX.
+Application web qui transforme une image (JPG, PNG, WebP), une description écrite, ou les deux, en modèle 3D texturé d'un objet, d'un personnage ou d'un véhicule, à visualiser dans le navigateur puis à télécharger en GLB, OBJ, STL ou FBX.
 
 ![Capture de l'application](docs/capture.png)
 
 ## Fonctionnalités
 
 - Import par glisser-déposer, suppression automatique de l'arrière-plan (rembg) et aperçu avant/après.
+- Trois façons de partir : une image seule, une description seule (« un robot jouet rouge »), ou une image accompagnée d'une description qui la transforme (« en or massif », « avec des ailes ») avant le passage en 3D.
 - Résolution du maillage : Brouillon (~5 000 triangles), Standard (~50 000), Haute (~200 000) ou Personnalisée (500 à 500 000 triangles, texture 512 / 1024 / 2048 / 4096 px).
 - Génération par un modèle image-to-3D interchangeable : TripoSR par défaut, générateur procédural CPU en secours.
 - Post-traitement : nettoyage, décimation ou subdivision vers le nombre de triangles visé, lissage de Taubin, remaillage isotrope optionnel, dépliage UV (xatlas) et bake de la texture.
@@ -68,8 +69,10 @@ Rien à télécharger à la main dans le cas général : au premier lancement, l
 | TripoSR | Hugging Face `stabilityai/TripoSR` (`config.yaml`, `model.ckpt`) | ~1,7 Go | génération 3D |
 | DINO ViT-B/16 | Hugging Face `facebook/dino-vitb16` (`config.json` seulement) | quelques Ko | encodeur d'image de TripoSR |
 | IS-Net | GitHub (rembg) | ~170 Mo | suppression de l'arrière-plan |
+| SDXL-Turbo | Hugging Face `stabilityai/sdxl-turbo` | ~7 Go | description → image, avec carte NVIDIA |
+| SD-Turbo | Hugging Face `stabilityai/sd-turbo` | ~2,5 Go | description → image, sur CPU |
 
-Les poids de TripoSR sont publics, aucun compte ni jeton Hugging Face n'est requis.
+Ces poids sont publics, aucun compte ni jeton Hugging Face n'est requis. Le modèle de description n'est téléchargé que la première fois qu'une description est utilisée.
 
 Pour une machine sans accès Internet, téléchargez-les ailleurs puis copiez-les :
 
@@ -108,12 +111,14 @@ npm run dev          # http://localhost:5173, /api est relayé vers le port 8000
 
 ## Utilisation
 
-1. Déposez une image dans la zone « Image ». Le détourage s'affiche ; « Voir l'original » permet de comparer.
+1. Déposez une image, écrivez une description, ou faites les deux. Avec une image, le détourage s'affiche et « Voir l'original » permet de comparer. Avec les deux, le curseur « Liberté de l'IA » règle à quel point la description peut s'éloigner de l'image.
 2. Choisissez une résolution, et si besoin la taille de texture et le lissage.
 3. Choisissez le modèle de génération, puis « Générer le modèle 3D ».
 4. Inspectez le résultat dans la visionneuse, ajustez-le si nécessaire, puis téléchargez-le.
 
-Conseils pour de bons résultats : un seul sujet, entier, bien éclairé, vu de trois quarts, sur un fond simple.
+Conseils pour de bons résultats : un seul sujet, entier, bien éclairé, vu de trois quarts, sur un fond simple. Pour une description, nommez un seul objet et ses matières ou couleurs ; l'application ajoute elle-même « objet isolé sur fond blanc ».
+
+Avec une description, l'application crée d'abord une image (quelques secondes sur GPU, une à deux minutes sur CPU), la détoure, puis la reconstruit en 3D comme n'importe quelle image importée.
 
 ### Exemples avec l'API
 
@@ -130,6 +135,16 @@ curl -H 'Content-Type: application/json' \
 # Résolution personnalisée
 curl -H 'Content-Type: application/json' \
      -d '{"upload_id": "3f2a…", "preset": "custom", "target_faces": 120000, "texture_size": 4096, "smoothing": 3, "generator": "triposr"}' \
+     http://localhost:8000/api/jobs
+
+# À partir d'une description seule
+curl -H 'Content-Type: application/json' \
+     -d '{"prompt": "un robot jouet rouge", "preset": "standard", "seed": 7}' \
+     http://localhost:8000/api/jobs
+
+# Image + description (strength : 0.1 = fidèle à l'image, 1 = très libre)
+curl -H 'Content-Type: application/json' \
+     -d '{"upload_id": "3f2a…", "prompt": "en or massif", "strength": 0.5, "preset": "standard"}' \
      http://localhost:8000/api/jobs
 
 # 3. Suivre la progression
@@ -149,6 +164,9 @@ La documentation interactive de l'API est sur `http://localhost:8000/docs`.
 | `I3D_DEVICE` | `auto` | `auto`, `cpu`, `cuda`, `cuda:1`… |
 | `I3D_TRIPOSR_MODEL` | `stabilityai/TripoSR` | identifiant Hugging Face ou dossier local |
 | `I3D_CHUNK_SIZE` | `8192` | taille des lots du réseau (baisser si la VRAM manque) |
+| `I3D_T2I_MODEL` | `auto` | modèle description → image : `auto` (SDXL-Turbo sur GPU, SD-Turbo sur CPU), identifiant Hugging Face ou dossier local |
+| `I3D_T2I_STEPS` | `0` | nombre d'étapes de diffusion (0 = automatique) |
+| `I3D_T2I_KEEP_LOADED` | `0` | `1` garde le modèle d'image en mémoire entre deux générations |
 | `I3D_REMBG_MODEL` | `isnet-general-use` | modèle rembg (`u2net`, `u2netp`, `birefnet-general`…) |
 | `I3D_USE_REMBG` | `1` | `0` force le détourage simple par couleur de fond |
 | `I3D_DATA_DIR` | `./data` | uploads, résultats, historique SQLite |
@@ -211,10 +229,11 @@ cd backend
 python -m pytest
 ```
 
-36 tests couvrent le détourage, les préréglages, le remaillage, le bake, le pipeline complet image → maillage → GLB/OBJ/STL/FBX (relus avec trimesh, un lecteur FBX de test et `assimp` s'il est installé), l'API et la file d'attente, ainsi que l'adaptateur TripoSR avec un faux modèle. Ils n'ont besoin ni de GPU ni de poids.
+43 tests couvrent le détourage, les préréglages, le remaillage, le bake, le pipeline complet image → maillage → GLB/OBJ/STL/FBX (relus avec trimesh, un lecteur FBX de test et `assimp` s'il est installé), l'API et la file d'attente, ainsi que l'adaptateur TripoSR et la génération d'image depuis une description avec de faux modèles. Ils n'ont besoin ni de GPU ni de poids.
 
 ## Limites connues
 
+- La génération depuis une description dépend de l'image intermédiaire : si elle montre plusieurs objets ou un sujet coupé, le modèle 3D en souffre. Changez la graine (`seed`) ou reformulez.
 - TripoSR reconstruit à partir d'une seule vue : l'arrière du modèle est inventé et les textures restent douces.
 - Le générateur procédural n'est pas une reconstruction 3D : il gonfle la silhouette et projette l'image dessus.
 - Une seule génération à la fois, pas d'authentification : à placer derrière un proxy si l'application est exposée.
@@ -222,4 +241,4 @@ python -m pytest
 
 ## Licences des composants
 
-TripoSR (MIT), rembg (MIT), xatlas (MIT), trimesh (MIT), PyMeshLab (GPL-3.0), Three.js et react-three-fiber (MIT). PyMeshLab étant sous GPL, retirez-le de `requirements.txt` si cette licence ne vous convient pas : la décimation bascule alors sur fast-simplification (MIT).
+TripoSR (MIT), diffusers (Apache-2.0), rembg (MIT), xatlas (MIT), trimesh (MIT), PyMeshLab (GPL-3.0), Three.js et react-three-fiber (MIT). PyMeshLab étant sous GPL, retirez-le de `requirements.txt` si cette licence ne vous convient pas : la décimation bascule alors sur fast-simplification (MIT). Les poids SDXL-Turbo et SD-Turbo sont diffusés sous la licence communautaire de Stability AI : lisez-en les conditions avant un usage commercial, ou indiquez un autre modèle avec `I3D_T2I_MODEL`.

@@ -41,6 +41,11 @@ class PipelineParams:
     smoothing: int = 0  # itérations de lissage de Taubin (0 = aucun)
     isotropic: bool = False  # remaillage isotrope PyMeshLab avant décimation
     seed: int = 0
+    # Mode « texte vers 3D » : description à partir de laquelle l'image est d'abord générée.
+    prompt: str | None = None
+    # Image + texte : image de départ que le prompt transforme, et liberté laissée au modèle.
+    source_upload_id: str | None = None
+    strength: float = 0.6
 
     def to_dict(self) -> dict:
         return asdict(self)

@@ -11,13 +11,13 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from .pipeline import presets
+from .pipeline import presets, text2image
 from .pipeline.background import ImageError
 from .pipeline.device import system_info
 from .pipeline.exporters import FORMATS
 from .pipeline.generators import REGISTRY, default_generator_name, list_generators
 from .pipeline.runner import PipelineParams, export_cached
-from .uploads import get_upload, save_upload
+from .uploads import get_upload, new_upload_id, save_upload
 
 router = APIRouter(prefix="/api")
 ID_RE = re.compile(r"^[a-f0-9]{12}$")
@@ -35,7 +35,11 @@ class ResolutionIn(BaseModel):
 
 
 class JobIn(ResolutionIn):
-    upload_id: str
+    # Image seule : photo → 3D. Texte seul : le texte est d'abord transformé en image.
+    # Les deux : le texte transforme l'image avant le passage en 3D.
+    upload_id: str | None = None
+    prompt: str | None = Field(None, max_length=text2image.MAX_PROMPT_CHARS)
+    strength: float = Field(0.6, ge=0.1, le=1.0, description="Image + texte : liberté laissée à l'IA")
     generator: str | None = None
     name: str | None = Field(None, max_length=100)
     seed: int = 0
@@ -112,6 +116,7 @@ def system(request: Request) -> dict:
         "faces_range": [presets.MIN_FACES, presets.MAX_FACES],
         "formats": {k: {"filename": v[0], "description": v[2]} for k, v in FORMATS.items()},
         "max_upload_mb": s.max_upload_mb,
+        "text_to_image": text2image.info(),
     }
 
 
@@ -144,9 +149,14 @@ def upload_file(request: Request, upload_id: str, kind: Literal["original", "cut
 @router.post("/jobs", status_code=201)
 def create_job(request: Request, body: JobIn) -> dict:
     s = _settings(request)
-    meta = get_upload(s, body.upload_id) if ID_RE.match(body.upload_id) else None
-    if meta is None:
-        raise HTTPException(404, "Image introuvable : importez-la à nouveau")
+    prompt = (body.prompt or "").strip()
+    if not prompt and not body.upload_id:
+        raise HTTPException(422, "Fournissez une image, une description, ou les deux")
+    meta = None
+    if body.upload_id:
+        meta = get_upload(s, body.upload_id) if ID_RE.match(body.upload_id) else None
+        if meta is None:
+            raise HTTPException(404, "Image introuvable : importez-la à nouveau")
     generator = body.generator or default_generator_name(s.default_generator)
     if generator not in REGISTRY:
         raise HTTPException(422, f"Générateur inconnu : {generator}")
@@ -154,6 +164,17 @@ def create_job(request: Request, body: JobIn) -> dict:
     if not ok:
         raise HTTPException(422, f"Générateur « {generator} » indisponible : {reason}")
     params = _params(body, generator, body.seed)
+    if prompt:
+        ok, reason = text2image.availability()
+        if not ok:
+            raise HTTPException(422, f"Génération d'image depuis un texte indisponible : {reason}")
+        params.prompt = prompt
+        if meta is not None:
+            params.source_upload_id = body.upload_id
+            params.strength = body.strength
+        # L'image sera créée par le worker ; son emplacement est réservé dès maintenant.
+        job = _queue(request).submit(body.name or prompt[:60], params, upload_id=new_upload_id(), kind="text")
+        return _job_out(request, job)
     name = body.name or Path(meta["filename"]).stem
     job = _queue(request).submit(name, params, upload_id=body.upload_id)
     return _job_out(request, job)
@@ -166,6 +187,7 @@ def reprocess_job(request: Request, job_id: str, body: ResolutionIn) -> dict:
     if parent["status"] != "done":
         raise HTTPException(409, "La génération d'origine n'est pas terminée")
     params = _params(body, parent["params"]["generator"], parent["params"].get("seed", 0))
+    params.prompt = parent["params"].get("prompt")  # conservé pour l'affichage ; le worker ne régénère pas l'image
     job = _queue(request).submit(parent["name"], params, upload_id=parent["upload_id"], parent_id=job_id,
                                  kind="reprocess")
     return _job_out(request, job)

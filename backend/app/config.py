@@ -32,6 +32,12 @@ class Settings:
     triposr_model: str = field(default_factory=lambda: _env("TRIPOSR_MODEL", "stabilityai/TripoSR"))
     # Taille des lots lors de l'interrogation du réseau (mémoire vs vitesse).
     chunk_size: int = field(default_factory=lambda: int(_env("CHUNK_SIZE", "8192")))
+    # Modèle texte → image : "auto" (SDXL-Turbo sur GPU, SD-Turbo sur CPU) ou identifiant Hugging Face.
+    t2i_model: str = field(default_factory=lambda: _env("T2I_MODEL", "auto"))
+    # Nombre de pas de diffusion (0 = choix automatique selon le modèle).
+    t2i_steps: int = field(default_factory=lambda: int(_env("T2I_STEPS", "0")))
+    # Garder le modèle d'image en mémoire entre deux générations (plus rapide, plus de VRAM).
+    t2i_keep_loaded: bool = field(default_factory=lambda: _env_bool("T2I_KEEP_LOADED", False))
     # Modèle rembg utilisé pour le détourage (u2net, u2netp, isnet-general-use, birefnet-general...).
     rembg_model: str = field(default_factory=lambda: _env("REMBG_MODEL", "isnet-general-use"))
     # Désactiver rembg force le détourage de secours (couleur de fond estimée).

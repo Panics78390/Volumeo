@@ -18,6 +18,8 @@ export default function App() {
   const [upload, setUpload] = useState<Upload | null>(null)
   const [uploading, setUploading] = useState(false)
   const [removeBg, setRemoveBg] = useState(true)
+  const [prompt, setPrompt] = useState('')
+  const [strength, setStrength] = useState(0.6)
 
   const [generator, setGenerator] = useState('')
   const [resolution, setResolution] = useState<Resolution>(DEFAULT_RESOLUTION)
@@ -104,11 +106,12 @@ export default function App() {
 
   // -- génération -------------------------------------------------------------
   const generate = async () => {
-    if (!upload) return
+    const text = prompt.trim()
+    if (!upload && !text) return
     setSubmitting(true)
     setError(null)
     try {
-      const job = await api.createJob(upload.id, generator, resolution)
+      const job = await api.createJob({ uploadId: upload?.id, prompt: text, strength }, generator, resolution)
       setJobs((prev) => [job, ...prev])
       setSelectedId(job.id)
     } catch (e) {
@@ -153,6 +156,9 @@ export default function App() {
   }
 
   const gen = system?.generators.find((g) => g.name === generator)
+  const t2i = system?.text_to_image
+  const hasPrompt = prompt.trim().length > 0
+  const canGenerate = (upload !== null || hasPrompt) && !uploading && !submitting && !!gen?.available
   const device = system?.device
 
   return (
@@ -185,7 +191,7 @@ export default function App() {
         <aside className="panel controls">
           <section>
             <h2>
-              <span className="step">1</span> Image
+              <span className="step">1</span> Image et/ou description
             </h2>
             <Dropzone
               upload={upload}
@@ -200,6 +206,50 @@ export default function App() {
                 setFile(null)
               }}
             />
+            <div className="field">
+              <label htmlFor="prompt">
+                Description <output>{upload ? 'transforme l’image' : 'crée le modèle'}</output>
+              </label>
+              <textarea
+                id="prompt"
+                rows={3}
+                value={prompt}
+                maxLength={t2i?.max_prompt_chars ?? 500}
+                disabled={t2i ? !t2i.available : false}
+                placeholder={
+                  upload
+                    ? 'Optionnel. Ex. : en bois sculpté, avec des ailes dorées'
+                    : 'Ex. : un petit robot jouet rouge avec de grands yeux'
+                }
+                onChange={(e) => setPrompt(e.target.value)}
+              />
+            </div>
+            {t2i && !t2i.available && (
+              <p className="muted small">La génération depuis un texte n’est pas installée ({t2i.reason}).</p>
+            )}
+            {upload && hasPrompt && (
+              <div className="field">
+                <label htmlFor="strength">
+                  Liberté de l’IA <output>{strength < 0.4 ? 'proche de l’image' : strength > 0.7 ? 'très libre' : 'équilibrée'}</output>
+                </label>
+                <input
+                  id="strength"
+                  type="range"
+                  min={0.2}
+                  max={0.9}
+                  step={0.05}
+                  value={strength}
+                  onChange={(e) => setStrength(Number(e.target.value))}
+                />
+              </div>
+            )}
+            <p className="muted small">
+              {upload && hasPrompt
+                ? 'L’image sera modifiée selon la description, puis transformée en 3D.'
+                : hasPrompt
+                  ? 'Une image sera créée à partir de la description, puis transformée en 3D.'
+                  : 'Donnez une image, une description, ou les deux.'}
+            </p>
           </section>
 
           <section>
@@ -239,7 +289,7 @@ export default function App() {
           </section>
 
           <div className="actions">
-            <button className="primary" disabled={!upload || uploading || submitting || !gen?.available} onClick={generate}>
+            <button className="primary" disabled={!canGenerate} onClick={generate}>
               Générer le modèle 3D
             </button>
             <button
@@ -291,7 +341,7 @@ export default function App() {
                 ) : (
                   <div className="progress-card plain">
                     <strong>Aucun modèle à afficher</strong>
-                    <span className="muted">Importez une image, choisissez une résolution puis lancez la génération.</span>
+                    <span className="muted">Importez une image ou décrivez un objet, choisissez une résolution puis lancez la génération.</span>
                   </div>
                 )
               }

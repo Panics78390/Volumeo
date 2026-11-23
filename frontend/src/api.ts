@@ -38,6 +38,7 @@ export interface SystemInfo {
   faces_range: [number, number]
   formats: Record<ExportFormat, { filename: string; description: string }>
   max_upload_mb: number
+  text_to_image: { available: boolean; reason: string; model: string; max_prompt_chars: number }
 }
 
 export interface Upload {
@@ -56,6 +57,8 @@ export interface JobParams {
   mc_resolution: number
   smoothing: number
   isotropic: boolean
+  prompt: string | null
+  source_upload_id: string | null
 }
 
 export interface JobResult {
@@ -70,7 +73,7 @@ export interface JobResult {
 export interface Job {
   id: string
   name: string
-  kind: 'generate' | 'reprocess'
+  kind: 'generate' | 'reprocess' | 'text'
   status: JobStatus
   progress: number
   message: string
@@ -147,8 +150,18 @@ export const api = {
     return request<Upload>('/api/uploads', { method: 'POST', body: form })
   },
 
-  createJob: (uploadId: string, generator: string, r: Resolution) =>
-    request<Job>('/api/jobs', json({ upload_id: uploadId, generator, ...resolutionBody(r) })),
+  /** Image seule, description seule, ou les deux (la description transforme alors l'image). */
+  createJob: (source: { uploadId?: string; prompt?: string; strength?: number }, generator: string, r: Resolution) =>
+    request<Job>(
+      '/api/jobs',
+      json({
+        upload_id: source.uploadId,
+        prompt: source.prompt || undefined,
+        strength: source.strength,
+        generator,
+        ...resolutionBody(r),
+      }),
+    ),
 
   reprocess: (jobId: string, r: Resolution) => request<Job>(`/api/jobs/${jobId}/reprocess`, json(resolutionBody(r))),
 

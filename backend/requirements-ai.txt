@@ -6,3 +6,7 @@ omegaconf>=2.3.0
 einops>=0.7.0
 transformers>=4.35,<5
 huggingface-hub>=0.20
+# Texte vers image (description → image → 3D) : SDXL-Turbo sur GPU, SD-Turbo sur CPU.
+diffusers>=0.30
+accelerate>=0.30
+safetensors>=0.4

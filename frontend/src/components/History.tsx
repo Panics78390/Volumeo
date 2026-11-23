@@ -41,6 +41,7 @@ export default function History({ jobs, selectedId, onSelect, onDelete, onCancel
               <span className="muted">
                 {timeFmt.format(new Date(job.created_at * 1000))}
                 {job.kind === 'reprocess' && ' · ajustement'}
+                {job.kind === 'text' && (job.params.source_upload_id ? ' · image + texte' : ' · texte')}
               </span>
               {isActive(job) ? (
                 <div className="mini-progress" aria-label={`${Math.round(job.progress * 100)} %`}>

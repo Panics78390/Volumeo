@@ -21,7 +21,10 @@ from pathlib import Path
 from PIL import Image
 
 from ..config import Settings
-from ..pipeline.runner import PipelineParams, reprocess, run_pipeline
+from ..pipeline import text2image
+from ..pipeline.background import ImageError
+from ..pipeline.runner import PipelineParams, _stage, reprocess, run_pipeline
+from ..uploads import save_image
 from .store import JobStore
 
 log = logging.getLogger(__name__)
@@ -166,6 +169,22 @@ class JobQueue:
         out_dir = self.job_dir(job["id"])
         if job["kind"] == "reprocess":
             return reprocess(self.job_dir(job["parent_id"]), out_dir, params, progress)
+        if params.prompt:
+            # Texte vers 3D : le prompt devient d'abord une image, enregistrée comme un import.
+            init = None
+            if params.source_upload_id:
+                # Image + texte : le prompt transforme l'image importée (détourée).
+                init = Image.open(self.settings.uploads_dir / params.source_upload_id / "cutout.png")
+                init.load()
+            image = text2image.generate_image(params.prompt, params.seed, _stage(progress, 0.0, 0.3),
+                                              init_image=init, strength=params.strength)
+            progress(0.3, "Suppression de l'arrière-plan")
+            try:
+                save_image(self.settings, image, job["name"], remove_bg=True, upload_id=job["upload_id"],
+                           extra={"prompt": params.prompt})
+            except ImageError as exc:
+                raise ImageError("L'image créée ne montre pas de sujet net : reformulez la description ou relancez.") from exc
+            progress = _stage(progress, 0.32, 1.0)
         cutout_path = self.settings.uploads_dir / job["upload_id"] / "cutout.png"
         img = Image.open(cutout_path)
         img.load()

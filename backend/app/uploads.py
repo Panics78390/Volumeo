@@ -11,10 +11,20 @@ from .config import Settings
 from .pipeline.background import load_image, remove_background
 
 
+def new_upload_id() -> str:
+    return uuid.uuid4().hex[:12]
+
+
 def save_upload(settings: Settings, data: bytes, filename: str, remove_bg: bool = True) -> dict:
     """Décode l'image, la détoure et enregistre original + détourage + métadonnées."""
-    img = load_image(data)
-    upload_id = uuid.uuid4().hex[:12]
+    return save_image(settings, load_image(data), filename, remove_bg)
+
+
+def save_image(settings: Settings, img, filename: str, remove_bg: bool = True, upload_id: str | None = None,
+               extra: dict | None = None) -> dict:
+    """Enregistre une image déjà décodée (importée ou générée depuis un prompt)."""
+    img = img.convert("RGBA")
+    upload_id = upload_id or new_upload_id()
     d = settings.uploads_dir / upload_id
     d.mkdir(parents=True, exist_ok=True)
     img.save(d / "original.png")
@@ -30,6 +40,7 @@ def save_upload(settings: Settings, data: bytes, filename: str, remove_bg: bool 
         "height": img.height,
         "background_method": method,
         "created_at": time.time(),
+        **(extra or {}),
     }
     (d / "meta.json").write_text(json.dumps(meta))
     return meta

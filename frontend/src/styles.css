@@ -326,6 +326,25 @@ select {
   margin-top: 14px;
 }
 
+textarea {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  color: inherit;
+  font: inherit;
+  resize: vertical;
+}
+
+textarea::placeholder {
+  color: var(--muted);
+}
+
+textarea:disabled {
+  opacity: 0.5;
+}
+
 .field label {
   display: flex;
   justify-content: space-between;

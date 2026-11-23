@@ -83,3 +83,76 @@ def test_queue_runs_jobs_in_order_and_cancel(client):
     jobs = [wait_job(client, i) for i in ids]
     assert [j["status"] for j in jobs] == ["done", "done", "cancelled"]
     assert jobs[0]["finished_at"] <= jobs[1]["started_at"], "une seule génération à la fois"
+
+
+# ---------------------------------------------------------------------------
+# Texte vers 3D
+# ---------------------------------------------------------------------------
+def _fake_text2image(monkeypatch, calls):
+    """Remplace le modèle de diffusion par une image synthétique (pas de poids requis)."""
+    from app.pipeline import text2image
+
+    def fake(prompt, seed=0, progress=None, init_image=None, strength=0.6):
+        calls.append((prompt, seed) if init_image is None else (prompt, seed, init_image.size, strength))
+        if progress:
+            progress(0.5, "Création de l'image")
+        return make_photo().convert("RGB")
+
+    monkeypatch.setattr(text2image, "generate_image", fake)
+    monkeypatch.setattr(text2image, "availability", lambda: (True, ""))
+
+
+def test_text_to_3d_flow(client, monkeypatch):
+    calls = []
+    _fake_text2image(monkeypatch, calls)
+    assert client.get("/api/system").json()["text_to_image"]["available"] is True
+
+    r = client.post("/api/jobs", json={"prompt": "  un robot jouet rouge ", "preset": "custom", "target_faces": 2000,
+                                       "texture_size": 512, "generator": "procedural", "seed": 7})
+    assert r.status_code == 201, r.text
+    created = r.json()
+    assert created["kind"] == "text" and created["name"] == "un robot jouet rouge"
+    job = wait_job(client, created["id"])
+    assert job["status"] == "done", job["error"]
+    assert calls == [("un robot jouet rouge", 7)]
+    assert job["params"]["prompt"] == "un robot jouet rouge"
+    assert abs(job["result"]["faces"] - 2000) <= 100
+    # L'image générée est conservée comme un import (aperçu + détourage).
+    assert client.get(f"/api/uploads/{job['upload_id']}/original").status_code == 200
+    assert client.get(job["urls"]["preview"]).status_code == 200
+
+    # Un ré-ajustement ne régénère pas l'image.
+    r = client.post(f"/api/jobs/{job['id']}/reprocess", json={"preset": "custom", "target_faces": 1000, "texture_size": 512})
+    child = wait_job(client, r.json()["id"])
+    assert child["status"] == "done" and len(calls) == 1
+
+
+def test_text_job_validation(client, monkeypatch):
+    up = _upload(client)
+    # ni image ni prompt
+    assert client.post("/api/jobs", json={"preset": "draft"}).status_code == 422
+    assert client.post("/api/jobs", json={"preset": "draft", "upload_id": up["id"], "prompt": "x", "strength": 3}).status_code == 422
+    assert client.post("/api/jobs", json={"preset": "draft", "upload_id": "000000000000", "prompt": "x"}).status_code == 404
+    assert client.post("/api/jobs", json={"preset": "draft", "prompt": "a" * 501}).status_code == 422
+    # modèle d'image non installé -> erreur claire
+    from app.pipeline import text2image
+
+    monkeypatch.setattr(text2image, "availability", lambda: (False, "module Python manquant : diffusers"))
+    r = client.post("/api/jobs", json={"preset": "draft", "prompt": "une chaise"})
+    assert r.status_code == 422 and "diffusers" in r.json()["detail"]
+
+
+def test_image_plus_text_flow(client, monkeypatch):
+    """Image + texte : le prompt transforme l'image importée avant la reconstruction 3D."""
+    calls = []
+    _fake_text2image(monkeypatch, calls)
+    up = _upload(client)
+    r = client.post("/api/jobs", json={"upload_id": up["id"], "prompt": "en or massif", "strength": 0.4, "preset": "custom",
+                                       "target_faces": 2000, "texture_size": 512, "generator": "procedural"})
+    assert r.status_code == 201, r.text
+    job = wait_job(client, r.json()["id"])
+    assert job["status"] == "done", job["error"]
+    assert calls == [("en or massif", 0, (640, 480), 0.4)], "l'image importée est passée au modèle"
+    assert job["kind"] == "text" and job["params"]["source_upload_id"] == up["id"]
+    assert job["upload_id"] != up["id"], "le résultat est un nouvel import, l'original est conservé"
+    assert client.get(up["urls"]["original"]).status_code == 200

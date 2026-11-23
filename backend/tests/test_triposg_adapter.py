@@ -104,8 +104,8 @@ def _fake_triposg(monkeypatch):
         def set_progress_bar_config(self, **kw):
             pass
 
-        def to(self, device):
-            calls["device"] = device
+        def to(self, device, dtype):
+            calls["device"] = (device, dtype)
             return self
 
         def __call__(self, image, num_inference_steps, guidance_scale, generator, callback_on_step_end,
@@ -207,3 +207,36 @@ def test_model_path_downloads_hub_repo_first(monkeypatch, tmp_path):
     monkeypatch.setattr(huggingface_hub, "snapshot_download", lambda repo_id: seen.append(repo_id) or str(tmp_path))
     assert T.model_path("VAST-AI/TripoSG") == str(tmp_path) and seen == ["VAST-AI/TripoSG"]
     assert T.model_path(str(tmp_path)) == str(tmp_path) and len(seen) == 1, "dossier local utilisé tel quel"
+
+
+def test_real_triposg_code_runs_in_float16(monkeypatch, tmp_path):
+    """Avec le vrai code TripoSG (s'il est installé) et un mini modèle aléatoire :
+    le chargement en float16 (utilisé sur GPU) doit convertir tous les tampons.
+    Sans cela : « mat1 and mat2 must have the same dtype, but got Float and Half »."""
+    T._ensure_diso_stub()
+    pl = pytest.importorskip("triposg.pipelines.pipeline_triposg")
+    from diffusers import FlowMatchEulerDiscreteScheduler
+    from transformers import BitImageProcessor, Dinov2Config, Dinov2Model
+    from triposg.models.autoencoders import TripoSGVAEModel
+    from triposg.models.transformers import TripoSGDiTModel
+
+    torch.manual_seed(0)
+    pipe = pl.TripoSGPipeline(
+        vae=TripoSGVAEModel(latent_channels=8, num_attention_heads=2, width_encoder=32, width_decoder=32,
+                            num_layers_encoder=1, num_layers_decoder=1),
+        transformer=TripoSGDiTModel(num_attention_heads=2, width=32, in_channels=8, num_layers=3,
+                                    cross_attention_dim=32),
+        scheduler=FlowMatchEulerDiscreteScheduler(),
+        image_encoder_dinov2=Dinov2Model(Dinov2Config(hidden_size=32, num_hidden_layers=1, num_attention_heads=2,
+                                                      intermediate_size=37, image_size=56, patch_size=14)),
+        feature_extractor_dinov2=BitImageProcessor(size={"shortest_edge": 56}, crop_size={"height": 56, "width": 56}),
+    )
+    pipe.save_pretrained(tmp_path)
+
+    monkeypatch.setattr(T.settings, "triposg_model", str(tmp_path))
+    monkeypatch.setattr(T.settings, "device", "cpu")
+    monkeypatch.setattr(T, "_dtype_for", lambda device: torch.float16)
+    loaded = T.TripoSGGenerator()._load(lambda f, m: None)
+    out = loaded(image=Image.new("RGB", (64, 64), "white"), num_inference_steps=1, use_flash_decoder=False,
+                 dense_octree_depth=5, hierarchical_octree_depth=5, generator=torch.Generator().manual_seed(0))
+    assert len(out.samples) == 1

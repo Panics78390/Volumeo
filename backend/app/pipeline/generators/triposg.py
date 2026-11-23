@@ -239,6 +239,12 @@ def transfer_colors(src_vertices: np.ndarray, src_colors: np.ndarray, fit: ViewF
     return color_fn
 
 
+def _dtype_for(device: str):
+    import torch
+
+    return torch.float16 if device.startswith("cuda") else torch.float32
+
+
 def model_path(name: str) -> str:
     """Dossier local des poids TripoSG.
 
@@ -291,12 +297,15 @@ class TripoSGGenerator(Generator):
             from triposg.pipelines.pipeline_triposg import TripoSGPipeline  # type: ignore[import-not-found]
 
             self._device = resolve_device(settings.device)
-            dtype = torch.float16 if self._device.startswith("cuda") else torch.float32
+            dtype = _dtype_for(self._device)
             progress(0.02, "Chargement des poids TripoSG (premier lancement : téléchargement de plusieurs Go)")
             # Chargement direct en float16 sur GPU : évite un pic de ~6 Go de RAM en float32.
             pipe = TripoSGPipeline.from_pretrained(model_path(settings.triposg_model), torch_dtype=dtype)
             pipe.set_progress_bar_config(disable=True)
-            pipe = pipe.to(self._device)
+            # ``torch_dtype`` ne convertit que les poids chargés : certains tampons créés à
+            # l'initialisation restent en float32 (erreur « Float and Half »). Le ``.to``
+            # complet, comme dans le script officiel, convertit tout.
+            pipe = pipe.to(self._device, dtype)
             self._pipe = pipe
             log.info("TripoSG chargé sur %s", self._device)
             return pipe

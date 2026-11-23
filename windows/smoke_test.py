@@ -33,6 +33,9 @@ else:
 assert b"Volumeo" in call("/"), "l'interface n'est pas servie"
 system = json.loads(call("/api/system"))
 print("générateurs :", [(g["name"], g["available"], g["reason"]) for g in system["generators"]])
+if "--expect-ai" in sys.argv:
+    missing = [g["name"] for g in system["generators"] if g["name"] in ("triposr", "triposg") and not g["available"]]
+    assert not missing, f"modèles d'IA non installés : {missing}"
 
 img = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
 ImageDraw.Draw(img).ellipse((50, 30, 206, 226), fill=(40, 160, 60, 255))

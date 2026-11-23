@@ -21,12 +21,13 @@ ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu
 # INSTALL_AI=0 produit une image légère, limitée au générateur procédural.
 ARG INSTALL_AI=1
 ARG TRIPOSR_REF=107cefdc244c39106fa830359024f6a2f1c78871
+ARG TRIPOSG_REF=fc5c40990181e2a756c4e0b1c2f4d6b5202faf8c
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# git : récupération du code TripoSR ; libGL/libOpenGL/libEGL : plugins PyMeshLab ;
+# git : récupération du code TripoSR et TripoSG ; libGL/libOpenGL/libEGL : plugins PyMeshLab ;
 # libgomp : onnxruntime (rembg).
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git libgl1 libopengl0 libglx0 libegl1 libgomp1 libglib2.0-0 \
@@ -40,13 +41,16 @@ RUN if [ "$INSTALL_AI" = "1" ]; then \
    && pip install -r requirements-ai.txt \
    && git clone https://github.com/VAST-AI-Research/TripoSR /opt/TripoSR \
    && git -C /opt/TripoSR checkout "$TRIPOSR_REF" \
-   && rm -rf /opt/TripoSR/.git /opt/TripoSR/examples /opt/TripoSR/figures; \
+   && rm -rf /opt/TripoSR/.git /opt/TripoSR/examples /opt/TripoSR/figures \
+   && git clone https://github.com/VAST-AI-Research/TripoSG /opt/TripoSG \
+   && git -C /opt/TripoSG checkout "$TRIPOSG_REF" \
+   && rm -rf /opt/TripoSG/.git /opt/TripoSG/assets; \
     fi
 
 COPY backend/app ./app
 COPY --from=frontend /src/dist ./static
 
-ENV PYTHONPATH=/opt/TripoSR \
+ENV PYTHONPATH=/opt/TripoSR:/opt/TripoSG \
     I3D_DATA_DIR=/data \
     I3D_MODELS_DIR=/models \
     I3D_STATIC_DIR=/app/static \

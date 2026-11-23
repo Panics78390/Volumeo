@@ -50,10 +50,11 @@ def configure_environment() -> Path:
     }
     for key, value in defaults.items():
         os.environ.setdefault(key, str(value))
-    # Code TripoSR téléchargé par l'installateur.
-    triposr = REPO_DIR / "third_party" / "TripoSR"
-    if triposr.is_dir() and str(triposr) not in sys.path:
-        sys.path.insert(0, str(triposr))
+    # Code TripoSR et TripoSG téléchargé par l'installateur.
+    for name in ("TripoSR", "TripoSG"):
+        code = REPO_DIR / "third_party" / name
+        if code.is_dir() and str(code) not in sys.path:
+            sys.path.insert(0, str(code))
     return home
 
 

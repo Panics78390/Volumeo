@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import router
+from .hf_compat import disable_hf_symlinks
 from .config import Settings, settings as default_settings
 from .jobs.queue import JobQueue
 from .jobs.store import JobStore
@@ -23,6 +24,7 @@ log = logging.getLogger("volumeo")
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or default_settings
     settings.ensure_dirs()
+    disable_hf_symlinks()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):

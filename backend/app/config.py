@@ -22,7 +22,7 @@ def _env_bool(name: str, default: bool) -> bool:
 class Settings:
     # Dossier où sont stockés les uploads, les résultats et la base SQLite.
     data_dir: Path = field(default_factory=lambda: Path(_env("DATA_DIR", "./data")).resolve())
-    # Générateur par défaut : "auto" choisit TripoSR s'il est installé, sinon "procedural".
+    # Générateur par défaut : "auto" choisit TripoSG (avec GPU) ou TripoSR s'ils sont installés, sinon "procedural".
     default_generator: str = field(default_factory=lambda: _env("GENERATOR", "auto"))
     # Périphérique PyTorch : "auto", "cuda", "cuda:1", "cpu"...
     device: str = field(default_factory=lambda: _env("DEVICE", "auto"))
@@ -30,6 +30,13 @@ class Settings:
     models_dir: Path = field(default_factory=lambda: Path(_env("MODELS_DIR", "./models")).resolve())
     # Identifiant Hugging Face ou chemin local du modèle TripoSR.
     triposr_model: str = field(default_factory=lambda: _env("TRIPOSR_MODEL", "stabilityai/TripoSR"))
+    # Identifiant Hugging Face ou chemin local du modèle TripoSG.
+    triposg_model: str = field(default_factory=lambda: _env("TRIPOSG_MODEL", "VAST-AI/TripoSG"))
+    # Pas de diffusion et force du guidage de TripoSG (valeurs du dépôt officiel).
+    triposg_steps: int = field(default_factory=lambda: int(_env("TRIPOSG_STEPS", "50")))
+    triposg_guidance: float = field(default_factory=lambda: float(_env("TRIPOSG_GUIDANCE", "7.0")))
+    # Couleurs de TripoSG : "auto" (TripoSR s'il est installé, sinon projection), "triposr", "projection".
+    triposg_colors: str = field(default_factory=lambda: _env("TRIPOSG_COLORS", "auto"))
     # Taille des lots lors de l'interrogation du réseau (mémoire vs vitesse).
     chunk_size: int = field(default_factory=lambda: int(_env("CHUNK_SIZE", "8192")))
     # Modèle texte → image : "auto" (SDXL-Turbo sur GPU, SD-Turbo sur CPU) ou identifiant Hugging Face.

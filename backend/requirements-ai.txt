@@ -10,3 +10,6 @@ huggingface-hub>=0.20
 diffusers>=0.30
 accelerate>=0.30
 safetensors>=0.4
+# TripoSG (forme précise) : dépendances de son code, en plus de diffusers ci-dessus.
+jaxtyping>=0.2
+typeguard>=4

@@ -283,9 +283,15 @@ export default function App() {
             {gen?.requires_gpu && device && !device.cuda && (
               <p className="alert warn small">Aucun GPU CUDA détecté : ce modèle tournera sur CPU, comptez de 30 s à plusieurs minutes.</p>
             )}
-            {system?.generators.some((g) => !g.available) && generator === 'procedural' && (
-              <p className="muted small">Pour une vraie reconstruction par IA, installez TripoSR (voir le README).</p>
-            )}
+            {generator === 'procedural' &&
+              (system?.generators.some((g) => g.name !== 'procedural' && g.available) ? (
+                <p className="alert warn small">
+                  Ce mode n'utilise pas d'IA : il gonfle simplement la silhouette. Choisissez TripoSG ou TripoSR pour une
+                  vraie forme 3D.
+                </p>
+              ) : (
+                <p className="muted small">Pour une vraie reconstruction par IA, installez TripoSG ou TripoSR (voir le README).</p>
+              ))}
           </section>
 
           <div className="actions">

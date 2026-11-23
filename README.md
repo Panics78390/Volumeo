@@ -11,7 +11,7 @@ Application web qui transforme une image (JPG, PNG, WebP), une description écri
 - Import par glisser-déposer, suppression automatique de l'arrière-plan (rembg) et aperçu avant/après.
 - Trois façons de partir : une image seule, une description seule (« un robot jouet rouge »), ou une image accompagnée d'une description qui la transforme (« en or massif », « avec des ailes ») avant le passage en 3D.
 - Résolution du maillage : Brouillon (~5 000 triangles), Standard (~50 000), Haute (~200 000) ou Personnalisée (500 à 500 000 triangles, texture 512 / 1024 / 2048 / 4096 px).
-- Génération par un modèle image-to-3D interchangeable : TripoSR par défaut, générateur procédural CPU en secours.
+- Génération par un modèle image-to-3D interchangeable : TripoSG (forme précise, carte NVIDIA conseillée), TripoSR (rapide, fonctionne aussi sur CPU), générateur procédural CPU en secours.
 - Post-traitement : nettoyage, décimation ou subdivision vers le nombre de triangles visé, lissage de Taubin, remaillage isotrope optionnel, dépliage UV (xatlas) et bake de la texture.
 - Visionneuse Three.js : rotation, zoom, éclairage réglable, modes texturé / uni / fil de fer, arêtes, nombre de triangles.
 - Exports GLB, OBJ + MTL + PNG (zip), STL (Z vers le haut, 100 mm, prêt pour l'impression) et FBX 7.4 binaire avec texture embarquée.
@@ -21,12 +21,12 @@ Application web qui transforme une image (JPG, PNG, WebP), une description écri
 ## Installation sous Windows (logiciel)
 
 1. Téléchargez `Volumeo-windows.zip` depuis la page [Releases](https://github.com/Panics78390/Volumeo/releases) et décompressez-le où vous voulez.
-2. Double-cliquez sur **`Installer Volumeo.bat`**. Il installe Python si besoin (via winget), les dépendances, PyTorch (version CUDA si une carte NVIDIA est détectée) et le code TripoSR, puis crée un raccourci **Volumeo** sur le Bureau. Comptez 5 à 15 minutes et 3 à 6 Go de disque.
+2. Double-cliquez sur **`Installer Volumeo.bat`**. Il installe Python si besoin (via winget), les dépendances, PyTorch (version CUDA si une carte NVIDIA est détectée) et le code de TripoSR et TripoSG, puis crée un raccourci **Volumeo** sur le Bureau. Comptez 5 à 15 minutes et 3 à 6 Go de disque.
 3. Lancez Volumeo avec le raccourci : l'application s'ouvre dans sa propre fenêtre.
 
 Les images, modèles générés, l'historique et les poids téléchargés sont rangés dans `%LOCALAPPDATA%\Volumeo`. Le journal est dans `%LOCALAPPDATA%\Volumeo\volumeo.log`. Pour désinstaller, supprimez ce dossier, le dossier décompressé et le raccourci.
 
-Options de l'installateur : `"Installer Volumeo.bat" -NoAI` (sans PyTorch ni TripoSR) ou `-Cpu` (PyTorch CPU même avec une carte NVIDIA). Depuis un clone du dépôt plutôt que le zip, Node.js est nécessaire pour compiler l'interface.
+Options de l'installateur : `"Installer Volumeo.bat" -NoAI` (sans PyTorch ni modèles d'IA) ou `-Cpu` (PyTorch CPU même avec une carte NVIDIA). Depuis un clone du dépôt plutôt que le zip, Node.js est nécessaire pour compiler l'interface.
 
 ## Démarrage rapide (Docker)
 
@@ -53,12 +53,12 @@ Les volumes `data` (images, modèles générés, historique) et `models` (poids 
 
 | | Minimum | Recommandé |
 |---|---|---|
-| GPU | aucun (CPU) | NVIDIA, 8 Go de VRAM (TripoSR en utilise environ 6) |
+| GPU | aucun (CPU) | NVIDIA, 8 Go de VRAM (TripoSR en utilise environ 6, TripoSG 8) |
 | Pilote | — | pilote NVIDIA récent + [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) pour Docker |
 | RAM | 8 Go | 16 Go |
 | Disque | 3 Go | 10 Go (image CUDA + poids) |
 
-Sans GPU CUDA, l'application démarre quand même : un avertissement s'affiche dans les logs et dans l'interface (« CPU uniquement »), et TripoSR tourne sur CPU (de 30 s à plusieurs minutes par génération selon la résolution). Le périphérique se force avec `I3D_DEVICE=cpu` ou `I3D_DEVICE=cuda:1`.
+Sans GPU CUDA, l'application démarre quand même : un avertissement s'affiche dans les logs et dans l'interface (« CPU uniquement »), et TripoSR tourne sur CPU (de 30 s à plusieurs minutes par génération selon la résolution). TripoSG reste utilisable sur CPU mais demande alors de longues minutes ; il n'est choisi d'office qu'avec un GPU. Le périphérique se force avec `I3D_DEVICE=cpu` ou `I3D_DEVICE=cuda:1`.
 
 ## Poids des modèles
 
@@ -67,6 +67,7 @@ Rien à télécharger à la main dans le cas général : au premier lancement, l
 | Modèle | Source | Taille | Usage |
 |---|---|---|---|
 | TripoSR | Hugging Face `stabilityai/TripoSR` (`config.yaml`, `model.ckpt`) | ~1,7 Go | génération 3D |
+| TripoSG | Hugging Face `VAST-AI/TripoSG` | plusieurs Go | génération 3D précise |
 | DINO ViT-B/16 | Hugging Face `facebook/dino-vitb16` (`config.json` seulement) | quelques Ko | encodeur d'image de TripoSR |
 | IS-Net | GitHub (rembg) | ~170 Mo | suppression de l'arrière-plan |
 | SDXL-Turbo | Hugging Face `stabilityai/sdxl-turbo` | ~7 Go | description → image, avec carte NVIDIA |
@@ -93,11 +94,12 @@ cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
 
-# Optionnel : TripoSR
+# Optionnel : TripoSR et TripoSG
 pip install torch                       # ou --index-url https://download.pytorch.org/whl/cpu pour une version CPU
 pip install -r requirements-ai.txt
 git clone https://github.com/VAST-AI-Research/TripoSR ../third_party/TripoSR
-export PYTHONPATH=$PWD/../third_party/TripoSR
+git clone https://github.com/VAST-AI-Research/TripoSG ../third_party/TripoSG
+export PYTHONPATH=$PWD/../third_party/TripoSR:$PWD/../third_party/TripoSG
 
 uvicorn app.main:app --reload --port 8000
 
@@ -107,7 +109,15 @@ npm install
 npm run dev          # http://localhost:5173, /api est relayé vers le port 8000
 ```
 
-`torchmcubes`, requis par le dépôt TripoSR d'origine et pénible à compiler, n'est pas nécessaire : l'extraction de surface passe par scikit-image.
+`torchmcubes`, requis par le dépôt TripoSR d'origine et pénible à compiler, n'est pas nécessaire : l'extraction de surface passe par scikit-image. De même, `diso` (décodeur rapide de TripoSG, extension CUDA à compiler) est remplacé par le décodeur hiérarchique du dépôt, lui aussi basé sur scikit-image.
+
+### Comment TripoSG est intégré
+
+TripoSG produit une forme sans couleur, dans le repère propre de l'objet. Volumeo :
+
+1. cherche la rotation (axe vertical, cap, hauteur de la caméra) dont la silhouette ressemble le plus à celle de la photo, pour tourner le modèle comme sur l'image ;
+2. si TripoSR est installé, le fait reconstruire le même objet en couleur, s'en sert pour départager les orientations ambiguës (avant ou arrière d'une voiture) et reprend ses couleurs, arrière compris ;
+3. sinon, projette la photo sur l'avant et l'arrière du modèle.
 
 ## Utilisation
 
@@ -160,9 +170,13 @@ La documentation interactive de l'API est sur `http://localhost:8000/docs`.
 
 | Variable | Défaut | Rôle |
 |---|---|---|
-| `I3D_GENERATOR` | `auto` | `auto` (TripoSR s'il est installé, sinon procédural), `triposr`, `procedural` |
+| `I3D_GENERATOR` | `auto` | `auto` (TripoSG avec un GPU, sinon TripoSR, sinon procédural), `triposg`, `triposr`, `procedural` |
 | `I3D_DEVICE` | `auto` | `auto`, `cpu`, `cuda`, `cuda:1`… |
 | `I3D_TRIPOSR_MODEL` | `stabilityai/TripoSR` | identifiant Hugging Face ou dossier local |
+| `I3D_TRIPOSG_MODEL` | `VAST-AI/TripoSG` | identifiant Hugging Face ou dossier local |
+| `I3D_TRIPOSG_STEPS` | `50` | pas de diffusion de TripoSG (moins = plus rapide, moins précis) |
+| `I3D_TRIPOSG_GUIDANCE` | `7.0` | fidélité de TripoSG à l'image |
+| `I3D_TRIPOSG_COLORS` | `auto` | couleurs de TripoSG : `auto`, `triposr` ou `projection` |
 | `I3D_CHUNK_SIZE` | `8192` | taille des lots du réseau (baisser si la VRAM manque) |
 | `I3D_T2I_MODEL` | `auto` | modèle description → image : `auto` (SDXL-Turbo sur GPU, SD-Turbo sur CPU), identifiant Hugging Face ou dossier local |
 | `I3D_T2I_STEPS` | `0` | nombre d'étapes de diffusion (0 = automatique) |
@@ -218,7 +232,7 @@ volumeo/
 
 Temps mesurés sur 4 cœurs CPU avec le générateur procédural : Brouillon ~2 s, Standard ~10 s, Haute ~20 s (hors temps du modèle neuronal).
 
-### Ajouter un modèle (SF3D, InstantMesh, Hunyuan3D-2…)
+### Ajouter un modèle (SF3D, InstantMesh…)
 
 Créez une sous-classe de `Generator` dans `backend/app/pipeline/generators/` qui renvoie un `RawResult` (maillage brut Y vers le haut + `color_fn(points) -> rgb`), puis ajoutez-la à `REGISTRY` dans `generators/__init__.py`. Elle apparaît automatiquement dans l'API et dans le sélecteur de l'interface. Si le modèle fournit déjà des couleurs par sommet, `color_fn_from_vertex_colors` fait l'affaire.
 
@@ -229,16 +243,16 @@ cd backend
 python -m pytest
 ```
 
-43 tests couvrent le détourage, les préréglages, le remaillage, le bake, le pipeline complet image → maillage → GLB/OBJ/STL/FBX (relus avec trimesh, un lecteur FBX de test et `assimp` s'il est installé), l'API et la file d'attente, ainsi que l'adaptateur TripoSR et la génération d'image depuis une description avec de faux modèles. Ils n'ont besoin ni de GPU ni de poids.
+48 tests couvrent le détourage, les préréglages, le remaillage, le bake, le pipeline complet image → maillage → GLB/OBJ/STL/FBX (relus avec trimesh, un lecteur FBX de test et `assimp` s'il est installé), l'API et la file d'attente, ainsi que les adaptateurs TripoSR et TripoSG (orientation selon la photo, reprise des couleurs) et la génération d'image depuis une description avec de faux modèles. Ils n'ont besoin ni de GPU ni de poids.
 
 ## Limites connues
 
 - La génération depuis une description dépend de l'image intermédiaire : si elle montre plusieurs objets ou un sujet coupé, le modèle 3D en souffre. Changez la graine (`seed`) ou reformulez.
-- TripoSR reconstruit à partir d'une seule vue : l'arrière du modèle est inventé et les textures restent douces.
+- TripoSR et TripoSG reconstruisent à partir d'une seule vue : l'arrière du modèle est inventé et les textures restent douces. TripoSG améliore nettement la forme, pas la texture. Aucun de ces modèles gratuits n'atteint le niveau des services en ligne commerciaux, et aucun ne modélise un intérieur (habitacle de voiture, par exemple).
 - Le générateur procédural n'est pas une reconstruction 3D : il gonfle la silhouette et projette l'image dessus.
 - Une seule génération à la fois, pas d'authentification : à placer derrière un proxy si l'application est exposée.
 - L'export FBX est validé avec Assimp ; vérifiez l'import dans votre logiciel cible (Blender, Unity, Unreal).
 
 ## Licences des composants
 
-TripoSR (MIT), diffusers (Apache-2.0), rembg (MIT), xatlas (MIT), trimesh (MIT), PyMeshLab (GPL-3.0), Three.js et react-three-fiber (MIT). PyMeshLab étant sous GPL, retirez-le de `requirements.txt` si cette licence ne vous convient pas : la décimation bascule alors sur fast-simplification (MIT). Les poids SDXL-Turbo et SD-Turbo sont diffusés sous la licence communautaire de Stability AI : lisez-en les conditions avant un usage commercial, ou indiquez un autre modèle avec `I3D_T2I_MODEL`.
+TripoSR (MIT), TripoSG (MIT), diffusers (Apache-2.0), rembg (MIT), xatlas (MIT), trimesh (MIT), PyMeshLab (GPL-3.0), Three.js et react-three-fiber (MIT). PyMeshLab étant sous GPL, retirez-le de `requirements.txt` si cette licence ne vous convient pas : la décimation bascule alors sur fast-simplification (MIT). Hunyuan3D-2 n'est volontairement pas proposé : sa licence exclut l'Union européenne, le Royaume-Uni et la Corée du Sud. Les poids SDXL-Turbo et SD-Turbo sont diffusés sous la licence communautaire de Stability AI : lisez-en les conditions avant un usage commercial, ou indiquez un autre modèle avec `I3D_T2I_MODEL`.

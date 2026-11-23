@@ -22,6 +22,7 @@ from PIL import Image
 
 from ..config import Settings
 from ..pipeline import text2image
+from ..pipeline.generators import unload_all
 from ..pipeline.background import ImageError
 from ..pipeline.runner import PipelineParams, _stage, reprocess, run_pipeline
 from ..uploads import save_image
@@ -176,6 +177,8 @@ class JobQueue:
                 # Image + texte : le prompt transforme l'image importée (détourée).
                 init = Image.open(self.settings.uploads_dir / params.source_upload_id / "cutout.png")
                 init.load()
+            # Le modèle d'image a besoin de toute la mémoire graphique (8 Go suffisent tout juste).
+            unload_all()
             image = text2image.generate_image(params.prompt, params.seed, _stage(progress, 0.0, 0.3),
                                               init_image=init, strength=params.strength)
             progress(0.3, "Suppression de l'arrière-plan")

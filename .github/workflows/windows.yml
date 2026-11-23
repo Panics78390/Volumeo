@@ -44,7 +44,7 @@ jobs:
           New-Item -ItemType Directory -Force ../backend/static | Out-Null
           Copy-Item dist/* ../backend/static -Recurse -Force
 
-      - name: Lancer l'installateur (avec PyTorch CPU et TripoSR)
+      - name: Lancer l'installateur (avec PyTorch CPU, TripoSR et TripoSG)
         shell: powershell
         run: ./windows/install.ps1 -Ci -Cpu
 
@@ -53,7 +53,7 @@ jobs:
         run: |
           .venv/Scripts/python -m pip install pytest httpx --quiet
           cd backend
-          $env:PYTHONPATH = "$PWD;$PWD/../third_party/TripoSR"
+          $env:PYTHONPATH = "$PWD;$PWD/../third_party/TripoSR;$PWD/../third_party/TripoSG"
           ../.venv/Scripts/python -m pytest -q
 
       - name: Démarrage du logiciel et génération d'un modèle
@@ -62,7 +62,7 @@ jobs:
           cd backend
           $proc = Start-Process ../.venv/Scripts/python.exe -ArgumentList '-m','app.desktop','--no-window','--port','8765' -PassThru -RedirectStandardOutput ../server.log -RedirectStandardError ../server.err
           try {
-            ../.venv/Scripts/python ../windows/smoke_test.py http://127.0.0.1:8765
+            ../.venv/Scripts/python ../windows/smoke_test.py http://127.0.0.1:8765 --expect-ai
             if ($LASTEXITCODE -ne 0) { throw 'smoke test en échec' }
           } finally {
             Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue

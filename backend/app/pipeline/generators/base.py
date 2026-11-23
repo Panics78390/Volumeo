@@ -8,7 +8,7 @@ Un générateur reçoit l'image détourée et cadrée (RGBA carrée) et renvoie 
   en n'importe quel point 3D. Elle sert au « bake » de la texture après
   remaillage, ce qui permet de changer la résolution sans perdre de couleur.
 
-Pour ajouter un modèle (Stable Fast 3D, InstantMesh, Hunyuan3D-2...), il
+Pour ajouter un modèle (Stable Fast 3D, InstantMesh...), il
 suffit d'écrire une sous-classe de :class:`Generator` et de l'enregistrer
 dans ``generators/__init__.py``.
 """

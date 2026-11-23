@@ -1,9 +1,9 @@
 ﻿<#
   Installe Volumeo sur Windows : environnement Python, dépendances, modèle IA
-  (TripoSR + PyTorch) et raccourci sur le Bureau.
+  (TripoSR, TripoSG, modèle d'image + PyTorch) et raccourci sur le Bureau.
 
   Lancez plutôt « Installer Volumeo.bat » (double-clic). Options :
-    -NoAI   n'installe pas PyTorch/TripoSR (générateur procédural seulement, ~1 Go de moins)
+    -NoAI   n'installe pas PyTorch ni les modèles d'IA (générateur procédural seulement, ~1 Go de moins)
     -Cpu    force PyTorch en version CPU même si une carte NVIDIA est présente
     -Ci     mode automatique : pas de raccourci, pas de pause
 #>
@@ -14,6 +14,7 @@ $ProgressPreference = 'SilentlyContinue'   # Invoke-WebRequest est bien plus rap
 $Root = Split-Path -Parent $PSScriptRoot
 $Venv = Join-Path $Root '.venv'
 $TripoSrRef = '107cefdc244c39106fa830359024f6a2f1c78871'
+$TripoSgRef = 'fc5c40990181e2a756c4e0b1c2f4d6b5202faf8c'
 
 function Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
 function Run($exe, [string[]]$arguments) {
@@ -114,6 +115,19 @@ if (-not $NoAI) {
         Copy-Item (Join-Path $tmp "TripoSR-$TripoSrRef\LICENSE") $TripoDir -Force
         Remove-Item $tmp, "$tmp.zip" -Recurse -Force
     }
+
+    $TripoSgDir = Join-Path $Root 'third_party\TripoSG'
+    if (-not (Test-Path (Join-Path $TripoSgDir 'triposg\pipelines\pipeline_triposg.py'))) {
+        Step 'Téléchargement du code TripoSG'
+        $tmp = Join-Path $env:TEMP "triposg-$TripoSgRef"
+        Invoke-WebRequest "https://github.com/VAST-AI-Research/TripoSG/archive/$TripoSgRef.zip" -OutFile "$tmp.zip"
+        if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
+        Expand-Archive "$tmp.zip" -DestinationPath $tmp
+        New-Item -ItemType Directory -Force $TripoSgDir | Out-Null
+        Copy-Item (Join-Path $tmp "TripoSG-$TripoSgRef\triposg") $TripoSgDir -Recurse -Force
+        Copy-Item (Join-Path $tmp "TripoSG-$TripoSgRef\LICENSE") $TripoSgDir -Force
+        Remove-Item $tmp, "$tmp.zip" -Recurse -Force
+    }
 }
 
 # ---------------------------------------------------------------- raccourci
@@ -131,4 +145,4 @@ if (-not $Ci) {
 
 Write-Host "`nVolumeo est installé." -ForegroundColor Green
 if (-not $Ci) { Write-Host 'Lancez-le avec le raccourci « Volumeo » du Bureau, ou avec Volumeo.bat.' }
-if (-not $NoAI) { Write-Host 'À la première génération avec TripoSR, les poids du modèle (~1,7 Go) seront téléchargés.' }
+if (-not $NoAI) { Write-Host 'Les poids des modèles d''IA sont téléchargés à leur première utilisation (TripoSR ~1,7 Go, TripoSG quelques Go).' }

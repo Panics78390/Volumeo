@@ -1,0 +1,67 @@
+"""Configuration de l'application, lue depuis les variables d'environnement.
+
+Toutes les variables sont préfixées par ``I3D_`` (ex. ``I3D_DATA_DIR``).
+"""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+
+
+def _env(name: str, default: str) -> str:
+    return os.environ.get(f"I3D_{name}", default)
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    return _env(name, "1" if default else "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+@dataclass
+class Settings:
+    # Dossier où sont stockés les uploads, les résultats et la base SQLite.
+    data_dir: Path = field(default_factory=lambda: Path(_env("DATA_DIR", "./data")).resolve())
+    # Générateur par défaut : "auto" choisit TripoSR s'il est installé, sinon "procedural".
+    default_generator: str = field(default_factory=lambda: _env("GENERATOR", "auto"))
+    # Périphérique PyTorch : "auto", "cuda", "cuda:1", "cpu"...
+    device: str = field(default_factory=lambda: _env("DEVICE", "auto"))
+    # Dossier local des poids (sinon téléchargement depuis Hugging Face).
+    models_dir: Path = field(default_factory=lambda: Path(_env("MODELS_DIR", "./models")).resolve())
+    # Identifiant Hugging Face ou chemin local du modèle TripoSR.
+    triposr_model: str = field(default_factory=lambda: _env("TRIPOSR_MODEL", "stabilityai/TripoSR"))
+    # Taille des lots lors de l'interrogation du réseau (mémoire vs vitesse).
+    chunk_size: int = field(default_factory=lambda: int(_env("CHUNK_SIZE", "8192")))
+    # Modèle rembg utilisé pour le détourage (u2net, u2netp, isnet-general-use, birefnet-general...).
+    rembg_model: str = field(default_factory=lambda: _env("REMBG_MODEL", "isnet-general-use"))
+    # Désactiver rembg force le détourage de secours (couleur de fond estimée).
+    use_rembg: bool = field(default_factory=lambda: _env_bool("USE_REMBG", True))
+    # Taille maximale d'une image importée (Mo).
+    max_upload_mb: int = field(default_factory=lambda: int(_env("MAX_UPLOAD_MB", "20")))
+    # Nombre de générations conservées dans l'historique (0 = illimité).
+    history_limit: int = field(default_factory=lambda: int(_env("HISTORY_LIMIT", "100")))
+    # Dossier du frontend compilé (servi par FastAPI si présent).
+    static_dir: Path = field(default_factory=lambda: Path(_env("STATIC_DIR", "./static")).resolve())
+    # Origines autorisées (CORS) pour le serveur de dev Vite.
+    cors_origins: list[str] = field(
+        default_factory=lambda: [o for o in _env("CORS_ORIGINS", "http://localhost:5173").split(",") if o]
+    )
+
+    @property
+    def uploads_dir(self) -> Path:
+        return self.data_dir / "uploads"
+
+    @property
+    def jobs_dir(self) -> Path:
+        return self.data_dir / "jobs"
+
+    @property
+    def db_path(self) -> Path:
+        return self.data_dir / "history.sqlite3"
+
+    def ensure_dirs(self) -> None:
+        for d in (self.data_dir, self.uploads_dir, self.jobs_dir, self.models_dir):
+            d.mkdir(parents=True, exist_ok=True)
+
+
+settings = Settings()

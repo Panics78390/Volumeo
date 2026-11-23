@@ -1,0 +1,8 @@
+# Dépendances du modèle TripoSR. PyTorch s'installe à part, avec l'index
+# correspondant à votre matériel (voir README) :
+#   CPU  : pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   CUDA : pip install torch            (les roues PyPI Linux incluent CUDA)
+omegaconf>=2.3.0
+einops>=0.7.0
+transformers>=4.35,<5
+huggingface-hub>=0.20

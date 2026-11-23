@@ -1,0 +1,28 @@
+# Lancement : docker compose up --build   puis http://localhost:8000
+# Avec GPU NVIDIA : docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
+services:
+  app:
+    build:
+      context: .
+      args:
+        TORCH_INDEX_URL: ${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cpu}
+        INSTALL_AI: ${INSTALL_AI:-1}
+    image: image-to-3d:latest
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      # auto = TripoSR s'il est installé, sinon générateur procédural
+      I3D_GENERATOR: ${I3D_GENERATOR:-auto}
+      # auto = CUDA si disponible, sinon CPU (avec avertissement)
+      I3D_DEVICE: ${I3D_DEVICE:-auto}
+      I3D_REMBG_MODEL: ${I3D_REMBG_MODEL:-isnet-general-use}
+      # Jeton Hugging Face (inutile pour TripoSR, dont les poids sont publics)
+      HF_TOKEN: ${HF_TOKEN:-}
+    volumes:
+      - data:/data      # images importées, modèles générés, historique SQLite
+      - models:/models  # poids téléchargés (TripoSR ~1,7 Go, DINO, rembg)
+    restart: unless-stopped
+
+volumes:
+  data:
+  models:

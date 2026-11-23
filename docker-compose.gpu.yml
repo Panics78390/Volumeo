@@ -1,0 +1,14 @@
+# Surcharge GPU NVIDIA (pilote + NVIDIA Container Toolkit requis sur l'hôte).
+services:
+  app:
+    build:
+      args:
+        # Les roues PyTorch de PyPI pour Linux x86-64 incluent CUDA.
+        TORCH_INDEX_URL: https://pypi.org/simple
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

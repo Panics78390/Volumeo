@@ -24,7 +24,7 @@ Application web qui transforme une image (JPG, PNG, WebP), une description écri
 2. Double-cliquez sur **`Installer Volumeo.bat`**. Il installe Python si besoin (via winget), les dépendances, PyTorch (version CUDA si une carte NVIDIA est détectée) et le code de TripoSR et TripoSG, puis crée un raccourci **Volumeo** sur le Bureau. Comptez 5 à 15 minutes et 3 à 6 Go de disque.
 3. Lancez Volumeo avec le raccourci : l'application s'ouvre dans sa propre fenêtre.
 
-Les images, modèles générés, l'historique et les poids téléchargés sont rangés dans `%LOCALAPPDATA%\Volumeo`. Le journal est dans `%LOCALAPPDATA%\Volumeo\volumeo.log`. Pour désinstaller, supprimez ce dossier, le dossier décompressé et le raccourci.
+Les images, modèles générés, l'historique et les poids téléchargés sont rangés dans `%LOCALAPPDATA%\Volumeo`. Les poids sont copiés dans ce dossier sans liens symboliques, donc ni le mode développeur ni les droits administrateur ne sont nécessaires. Le journal est dans `%LOCALAPPDATA%\Volumeo\volumeo.log`. Pour désinstaller, supprimez ce dossier, le dossier décompressé et le raccourci.
 
 Options de l'installateur : `"Installer Volumeo.bat" -NoAI` (sans PyTorch ni modèles d'IA) ou `-Cpu` (PyTorch CPU même avec une carte NVIDIA). Depuis un clone du dépôt plutôt que le zip, Node.js est nécessaire pour compiler l'interface.
 
@@ -243,7 +243,7 @@ cd backend
 python -m pytest
 ```
 
-49 tests couvrent le détourage, les préréglages, le remaillage, le bake, le pipeline complet image → maillage → GLB/OBJ/STL/FBX (relus avec trimesh, un lecteur FBX de test et `assimp` s'il est installé), l'API et la file d'attente, ainsi que les adaptateurs TripoSR et TripoSG (orientation selon la photo, reprise des couleurs) et la génération d'image depuis une description avec de faux modèles. Ils n'ont besoin ni de GPU ni de poids.
+51 tests couvrent le détourage, les préréglages, le remaillage, le bake, le pipeline complet image → maillage → GLB/OBJ/STL/FBX (relus avec trimesh, un lecteur FBX de test et `assimp` s'il est installé), l'API et la file d'attente, ainsi que les adaptateurs TripoSR et TripoSG (orientation selon la photo, reprise des couleurs) et la génération d'image depuis une description avec de faux modèles. Ils n'ont besoin ni de GPU ni de poids.
 
 ## Limites connues
 

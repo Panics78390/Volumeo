@@ -8,10 +8,11 @@ couleur. Volumeo complète donc la forme ainsi :
    forcément tournée comme sur la photo. On cherche la rotation (axe vertical,
    cap, élévation de la caméra) dont la silhouette correspond le mieux à celle
    de l'image détourée.
-2. **Couleurs** : si TripoSR est installé, il reconstruit le même objet en
-   couleur (y compris l'arrière, qu'il invente) et chaque point de la forme
-   TripoSG prend la couleur du point le plus proche de la reconstruction
-   TripoSR. Sinon, l'image est projetée sur l'avant et l'arrière.
+2. **Couleurs** : les faces que l'objectif voit vraiment (test de profondeur)
+   reçoivent le pixel net de la photo. Si la forme est symétrique (voiture,
+   personnage...), le côté caché reprend la photo de son reflet. Le reste
+   (l'arrière, par exemple) vient de TripoSR, qui reconstruit le même objet en
+   couleur, ou à défaut d'une simple projection de l'image.
 
 Installation (voir README) :
     git clone https://github.com/VAST-AI-Research/TripoSG /opt/TripoSG
@@ -239,6 +240,122 @@ def transfer_colors(src_vertices: np.ndarray, src_colors: np.ndarray, fit: ViewF
     return color_fn
 
 
+def find_symmetry(vertices: np.ndarray, n: int = 6000, seed: int = 0, tol: float = 0.008):
+    """Cherche un plan de symétrie miroir parmi les trois plans principaux de la
+    boîte englobante (les formes TripoSG sortent alignées sur leurs axes).
+
+    Renvoie ``(normale, point)`` du plan, ou ``None`` si aucun plan ne colle à
+    moins de ``tol`` × diagonale (distance moyenne entre la forme et son reflet)."""
+    pts = np.asarray(vertices, dtype=np.float64)
+    if len(pts) > n:
+        pts = pts[np.random.default_rng(seed).choice(len(pts), n, replace=False)]
+    lo, hi = pts.min(0), pts.max(0)
+    center = (lo + hi) / 2
+    diag = float(np.linalg.norm(hi - lo))
+    if diag <= 0:
+        return None
+    tree = cKDTree(pts)
+    scores = []
+    for axis in range(3):
+        refl = pts.copy()
+        refl[:, axis] = 2 * center[axis] - refl[:, axis]
+        scores.append((tree.query(refl)[0].mean() / diag, axis))
+    scores.sort()
+    # Un seul plan franchement meilleur que les autres : un objet presque cubique
+    # ne doit pas recopier son avant sur son arrière.
+    if scores[0][0] > tol or scores[0][0] > 0.5 * scores[1][0]:
+        return None
+    normal = np.zeros(3)
+    normal[scores[0][1]] = 1.0
+    return normal, center
+
+
+def photo_colors(image: Image.Image, fit: ViewFit, mesh: trimesh.Trimesh, fallback_fn=None,
+                 symmetry: tuple[np.ndarray, np.ndarray] | None = None, seed: int = 0):
+    """``color_fn`` qui colle la photo nette sur les faces réellement vues par
+    l'objectif (test de profondeur), au lieu de couleurs interpolées.
+
+    - face vue et tournée vers l'objectif : pixel de la photo ;
+    - face cachée dont le reflet par ``symmetry`` (plan de symétrie, repère du
+      maillage) est vu : pixel du reflet (le flanc droit d'une voiture copie le
+      flanc gauche) ;
+    - sinon : ``fallback_fn`` (couleurs TripoSR), ou la projection simple.
+    Les transitions sont fondues selon l'angle entre la face et l'objectif.
+    """
+    from .procedural import _bleed_colors
+
+    rgba = np.asarray(image.convert("RGBA"))
+    h, w = rgba.shape[:2]
+    colors = _bleed_colors(rgba)
+    inside = ndimage.binary_dilation(rgba[..., 3] > 127, iterations=2)
+    if fallback_fn is None:
+        fallback_fn = projection_colors(image, fit)
+
+    # Tampon de profondeur à la résolution de la photo (la caméra regarde vers -Z :
+    # le point visible d'un pixel est celui de plus grand z).
+    samples, _ = trimesh.sample.sample_surface(mesh, 300_000, seed=seed)
+    samples = np.vstack([samples, mesh.vertices])
+    cam = fit.to_camera(samples)
+
+    def pix(c: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        ix = np.clip(np.round((c[:, 0] + 0.5) * (w - 1)).astype(np.int64), 0, w - 1)
+        iy = np.clip(np.round((0.5 - c[:, 1]) * (h - 1)).astype(np.int64), 0, h - 1)
+        return ix, iy
+
+    zbuf = np.full((h, w), -np.inf)
+    ix, iy = pix(cam)
+    np.maximum.at(zbuf, (iy, ix), cam[:, 2])
+    holes = ~np.isfinite(zbuf)
+    zbuf = np.where(holes, ndimage.maximum_filter(np.where(holes, -1e9, zbuf), size=5), zbuf)
+    zbuf[zbuf <= -1e8] = -np.inf
+    eps = 0.02 * float(np.ptp(cam[:, 2]) + 1e-9)
+
+    normals_cam = np.asarray(mesh.vertex_normals) @ _rot_x(fit.elevation).T
+    tree = cKDTree(mesh.vertices)
+    if symmetry is not None:
+        sym_n = np.asarray(symmetry[0], dtype=np.float64)
+        sym_n = sym_n / np.linalg.norm(sym_n)
+        sym_c = np.asarray(symmetry[1], dtype=np.float64)
+
+    def view_weight(points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Poids photo (0..1) et position dans le repère de la photo de chaque point."""
+        c = fit.to_camera(np.asarray(points, dtype=np.float64))
+        px_, py_ = pix(c)
+        visible = (c[:, 2] >= zbuf[py_, px_] - eps) & inside[py_, px_]
+        facing = normals_cam[tree.query(points)[1], 2]
+        weight = np.clip((facing - 0.05) / 0.35, 0.0, 1.0) * visible
+        return weight, c
+
+    def sample_photo(c: np.ndarray) -> np.ndarray:
+        fx = (c[:, 0] + 0.5) * (w - 1)
+        fy = (0.5 - c[:, 1]) * (h - 1)
+        out = np.empty((len(c), 3), dtype=np.float32)
+        for ch in range(3):
+            out[:, ch] = ndimage.map_coordinates(colors[..., ch], [fy, fx], order=1, mode="nearest")
+        return out
+
+    def color_fn(points: np.ndarray) -> np.ndarray:
+        points = np.asarray(points, dtype=np.float64)
+        wgt, c = view_weight(points)
+        out = np.zeros((len(points), 3), dtype=np.float32)
+        out += wgt[:, None] * sample_photo(c)
+        rest = 1.0 - wgt
+        need = rest > 1e-3
+        if symmetry is not None and need.any():
+            p = points[need]
+            mirrored = p - 2 * ((p - sym_c) @ sym_n)[:, None] * sym_n
+            mw, mc = view_weight(mirrored)
+            take = rest[need] * mw
+            out[need] += take[:, None] * sample_photo(mc)
+            rest[need] -= take
+            need = rest > 1e-3
+        if need.any():
+            out[need] += rest[need][:, None] * np.asarray(fallback_fn(points[need]), dtype=np.float32)
+        return np.clip(out, 0.0, 1.0)
+
+    return color_fn
+
+
 def _dtype_for(device: str):
     import torch
 
@@ -335,8 +452,9 @@ class TripoSGGenerator(Generator):
             return kwargs
 
         progress(0.05, "Encodage de l'image (DINOv2)")
-        # Grille finale 256³ (brouillon) ou 512³ ; décodeur hiérarchique = scikit-image, pas d'extension CUDA.
-        depth = 9 if options.mc_resolution >= 256 else 8
+        # Grille finale 256³ (brouillon, standard) ou 512³ (haute) ; le décodeur
+        # hiérarchique tourne en partie sur le processeur, 512³ coûte plusieurs minutes.
+        depth = 9 if options.mc_resolution > 256 else 8
         with torch.no_grad():
             out = pipe(
                 image=rgb,
@@ -361,6 +479,7 @@ class TripoSGGenerator(Generator):
 
         progress(0.65, "Orientation selon la photo")
         alpha = np.asarray(rgba)[..., 3]
+        symmetry = find_symmetry(mesh.vertices, seed=options.seed)
         candidates = fit_to_silhouette(mesh.vertices, alpha, seed=options.seed, top_k=8)
 
         colored = self._triposr_reference(image, options, progress)
@@ -375,20 +494,25 @@ class TripoSGGenerator(Generator):
         rot = np.eye(4)
         rot[:3, :3] = fit.upright
         mesh.apply_transform(rot)
-        mesh.apply_translation(-(mesh.bounds[0] + mesh.bounds[1]) / 2)
+        shift = -(mesh.bounds[0] + mesh.bounds[1]) / 2
+        mesh.apply_translation(shift)
         fit = place_on_image(fit, mesh.vertices, alpha)
+        if symmetry is not None:
+            symmetry = (fit.upright @ symmetry[0], fit.upright @ symmetry[1] + shift)
 
+        progress(0.9, "Couleurs : photo sur les faces visibles")
         if colored is not None:
             cols = np.asarray(colored.visual.vertex_colors)[:, :3]
-            color_fn, colors_from = transfer_colors(colored.vertices, cols, fit, mesh.vertices), "triposr"
+            fallback, colors_from = transfer_colors(colored.vertices, cols, fit, mesh.vertices), "photo+triposr"
         else:
-            progress(0.9, "Couleurs : projection de l'image")
-            color_fn, colors_from = projection_colors(image, fit), "projection"
+            fallback, colors_from = projection_colors(image, fit), "photo+projection"
+        color_fn = photo_colors(image, fit, mesh, fallback, symmetry, seed=options.seed)
 
         progress(0.95, "Couleurs des sommets")
         vc = color_fn(mesh.vertices)
         mesh.visual.vertex_colors = (np.column_stack([vc, np.ones(len(vc))]) * 255).astype(np.uint8)
-        info = {"device": device, "steps": steps, "silhouette_iou": round(fit.iou, 3), "colors": colors_from}
+        info = {"device": device, "steps": steps, "silhouette_iou": round(fit.iou, 3), "colors": colors_from,
+                "symmetry": symmetry is not None}
         return RawResult(mesh=mesh, color_fn=color_fn, info=info)
 
     def _triposr_reference(self, image, options, progress) -> trimesh.Trimesh | None:

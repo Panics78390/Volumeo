@@ -11,3 +11,4 @@ data/
 models/
 *.tsbuildinfo
 .env
+third_party/

@@ -1,0 +1,91 @@
+name: Volumeo Windows
+
+# Teste l'installateur et l'application sous Windows, puis produit
+# Volumeo-windows.zip (interface déjà compilée, Node.js inutile côté utilisateur).
+# Un tag « v* » publie le zip dans une Release GitHub.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Compiler l'interface
+        shell: pwsh
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+          New-Item -ItemType Directory -Force ../backend/static | Out-Null
+          Copy-Item dist/* ../backend/static -Recurse -Force
+
+      - name: Lancer l'installateur (avec PyTorch CPU et TripoSR)
+        shell: powershell
+        run: ./windows/install.ps1 -Ci -Cpu
+
+      - name: Tests
+        shell: pwsh
+        run: |
+          .venv/Scripts/python -m pip install pytest httpx --quiet
+          cd backend
+          $env:PYTHONPATH = "$PWD;$PWD/../third_party/TripoSR"
+          ../.venv/Scripts/python -m pytest -q
+
+      - name: Démarrage du logiciel et génération d'un modèle
+        shell: pwsh
+        run: |
+          cd backend
+          $proc = Start-Process ../.venv/Scripts/python.exe -ArgumentList '-m','app.desktop','--no-window','--port','8765' -PassThru -RedirectStandardOutput ../server.log -RedirectStandardError ../server.err
+          try {
+            ../.venv/Scripts/python ../windows/smoke_test.py http://127.0.0.1:8765
+            if ($LASTEXITCODE -ne 0) { throw 'smoke test en échec' }
+          } finally {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            Get-Content ../server.err -Tail 30 -ErrorAction SilentlyContinue
+          }
+
+      - name: Assembler Volumeo-windows.zip
+        shell: pwsh
+        run: |
+          $out = 'dist/Volumeo'
+          New-Item -ItemType Directory -Force $out | Out-Null
+          Copy-Item 'Installer Volumeo.bat','Volumeo.bat','README.md' $out
+          Copy-Item windows $out -Recurse
+          Copy-Item docs $out -Recurse
+          New-Item -ItemType Directory -Force "$out/backend" | Out-Null
+          Copy-Item backend/app,backend/static "$out/backend" -Recurse
+          Copy-Item backend/requirements.txt,backend/requirements-ai.txt "$out/backend"
+          Get-ChildItem $out -Recurse -Directory -Filter __pycache__ | Remove-Item -Recurse -Force
+          Compress-Archive -Path $out -DestinationPath Volumeo-windows.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Volumeo-windows
+          path: Volumeo-windows.zip
+
+      - name: Publier la Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create $env:GITHUB_REF_NAME Volumeo-windows.zip --title "Volumeo $env:GITHUB_REF_NAME" --generate-notes

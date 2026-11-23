@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/logo.png" alt="Volumeo, de l'image à la 3D" width="520"></p>
+
 # Volumeo
 
 Application web qui transforme une image (JPG, PNG, WebP) d'un objet, d'un personnage ou d'un véhicule en modèle 3D texturé, à visualiser dans le navigateur puis à télécharger en GLB, OBJ, STL ou FBX.
@@ -14,6 +16,16 @@ Application web qui transforme une image (JPG, PNG, WebP) d'un objet, d'un perso
 - Exports GLB, OBJ + MTL + PNG (zip), STL (Z vers le haut, 100 mm, prêt pour l'impression) et FBX 7.4 binaire avec texture embarquée.
 - File d'attente (une génération à la fois), barre de progression, annulation, historique persistant.
 - « Ajuster le modèle affiché » : change résolution, texture et lissage d'une génération existante sans relancer l'IA.
+
+## Installation sous Windows (logiciel)
+
+1. Téléchargez `Volumeo-windows.zip` depuis la page [Releases](https://github.com/Panics78390/Volumeo/releases) et décompressez-le où vous voulez.
+2. Double-cliquez sur **`Installer Volumeo.bat`**. Il installe Python si besoin (via winget), les dépendances, PyTorch (version CUDA si une carte NVIDIA est détectée) et le code TripoSR, puis crée un raccourci **Volumeo** sur le Bureau. Comptez 5 à 15 minutes et 3 à 6 Go de disque.
+3. Lancez Volumeo avec le raccourci : l'application s'ouvre dans sa propre fenêtre.
+
+Les images, modèles générés, l'historique et les poids téléchargés sont rangés dans `%LOCALAPPDATA%\Volumeo`. Le journal est dans `%LOCALAPPDATA%\Volumeo\volumeo.log`. Pour désinstaller, supprimez ce dossier, le dossier décompressé et le raccourci.
+
+Options de l'installateur : `"Installer Volumeo.bat" -NoAI` (sans PyTorch ni TripoSR) ou `-Cpu` (PyTorch CPU même avec une carte NVIDIA). Depuis un clone du dépôt plutôt que le zip, Node.js est nécessaire pour compiler l'interface.
 
 ## Démarrage rapide (Docker)
 
@@ -154,6 +166,7 @@ volumeo/
 │  │  ├─ api.py             routes /api (uploads, jobs, téléchargements)
 │  │  ├─ config.py          configuration par variables d'environnement
 │  │  ├─ uploads.py         stockage des images et de leur détourage
+│  │  ├─ desktop.py         lanceur de bureau (fenêtre native pywebview)
 │  │  ├─ jobs/
 │  │  │  ├─ queue.py        file d'attente asyncio + thread dédié au pipeline
 │  │  │  └─ store.py        historique SQLite
@@ -168,6 +181,8 @@ volumeo/
 │  │     └─ runner.py       orchestration et progression
 │  └─ tests/
 ├─ frontend/src/            App.tsx, api.ts, components/ (Dropzone, ResolutionPicker, Viewer, ViewerToolbar, History)
+├─ windows/                 install.ps1, icône, test de fumée
+├─ Installer Volumeo.bat, Volumeo.bat
 ├─ Dockerfile, docker-compose.yml, docker-compose.gpu.yml
 └─ README.md
 ```

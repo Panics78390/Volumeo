@@ -2,13 +2,18 @@ name: Volumeo Windows
 
 # Teste l'installateur et l'application sous Windows, puis produit
 # Volumeo-windows.zip (interface déjà compilée, Node.js inutile côté utilisateur).
-# Un tag « v* » publie le zip dans une Release GitHub.
+# Un tag « v* », ou un lancement manuel avec une version, publie le zip dans une Release GitHub.
 on:
   push:
     branches: [main]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version à publier (ex. v1.0.0). Vide = simple build sans Release."
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -83,9 +88,18 @@ jobs:
           name: Volumeo-windows
           path: Volumeo-windows.zip
 
+      # Publication : soit par un tag « v* », soit par un lancement manuel avec une version.
       - name: Publier la Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.version != ''
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create $env:GITHUB_REF_NAME Volumeo-windows.zip --title "Volumeo $env:GITHUB_REF_NAME" --generate-notes
+          VERSION: ${{ inputs.version || github.ref_name }}
+        run: |
+          gh release view $env:VERSION *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:VERSION Volumeo-windows.zip --clobber
+          } else {
+            gh release create $env:VERSION Volumeo-windows.zip --target $env:GITHUB_SHA --title "Volumeo $env:VERSION" --generate-notes
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'publication en échec' }

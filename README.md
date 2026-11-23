@@ -243,7 +243,7 @@ cd backend
 python -m pytest
 ```
 
-51 tests couvrent le détourage, les préréglages, le remaillage, le bake, le pipeline complet image → maillage → GLB/OBJ/STL/FBX (relus avec trimesh, un lecteur FBX de test et `assimp` s'il est installé), l'API et la file d'attente, ainsi que les adaptateurs TripoSR et TripoSG (orientation selon la photo, reprise des couleurs) et la génération d'image depuis une description avec de faux modèles. Ils n'ont besoin ni de GPU ni de poids.
+52 tests couvrent le détourage, les préréglages, le remaillage, le bake, le pipeline complet image → maillage → GLB/OBJ/STL/FBX (relus avec trimesh, un lecteur FBX de test et `assimp` s'il est installé), l'API et la file d'attente, ainsi que les adaptateurs TripoSR et TripoSG (orientation selon la photo, reprise des couleurs) et la génération d'image depuis une description avec de faux modèles. Ils n'ont besoin ni de GPU ni de poids.
 
 ## Limites connues
 

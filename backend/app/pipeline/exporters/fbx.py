@@ -177,9 +177,9 @@ def build_scene(
     for k, v in (("Version", 1000), ("Year", now.year), ("Month", now.month), ("Day", now.day), ("Hour", now.hour),
                  ("Minute", now.minute), ("Second", now.second), ("Millisecond", now.microsecond // 1000)):
         ts.add(k, v)
-    hdr.add("Creator", "Image-to-3D FBX writer")
+    hdr.add("Creator", "Volumeo FBX writer")
     nodes += [hdr, Node("FileId", [Raw(_FILE_ID)]), Node("CreationTime", [_TIME_ID]),
-              Node("Creator", ["Image-to-3D FBX writer"])]
+              Node("Creator", ["Volumeo FBX writer"])]
 
     gs = Node("GlobalSettings")
     gs.add("Version", 1000)

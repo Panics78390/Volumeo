@@ -17,7 +17,7 @@ from .jobs.store import JobStore
 from .pipeline.device import system_info
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-log = logging.getLogger("image-to-3d")
+log = logging.getLogger("volumeo")
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -40,7 +40,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await queue.stop()
         store.close()
 
-    app = FastAPI(title="Image vers 3D", version="1.0.0", lifespan=lifespan)
+    app = FastAPI(title="Volumeo", version="1.0.0", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

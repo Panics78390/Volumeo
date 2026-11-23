@@ -31,7 +31,7 @@ def export_glb(uvmesh: UVMesh, path: Path) -> Path:
 def obj_text(uvmesh: UVMesh, mtl_name: str = "model.mtl", material: str = "material0") -> str:
     """OBJ texte : v / vt / vn / f v/vt/vn (indices 1-based, uv origine bas-gauche)."""
     buf = io.StringIO()
-    buf.write("# Généré par Image-to-3D\n")
+    buf.write("# Généré par Volumeo\n")
     buf.write(f"mtllib {mtl_name}\no model\n")
     np.savetxt(buf, uvmesh.vertices, fmt="v %.6f %.6f %.6f")
     np.savetxt(buf, uvmesh.uvs, fmt="vt %.6f %.6f")

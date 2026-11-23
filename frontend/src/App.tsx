@@ -162,7 +162,7 @@ export default function App() {
           <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true">
             <path d="M16 4l10 5.5v13L16 28 6 22.500v-13z M6 9.500l10 5.500 10-5.500 M16 15v13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
           </svg>
-          <h1>Image vers 3D</h1>
+          <h1>Volumeo</h1>
         </div>
         {device && (
           <span className={`device ${device.cuda ? 'gpu' : 'cpu'}`} title={device.warning ?? undefined}>

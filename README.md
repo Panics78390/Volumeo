@@ -1,4 +1,4 @@
-# Image vers 3D
+# Volumeo
 
 Application web qui transforme une image (JPG, PNG, WebP) d'un objet, d'un personnage ou d'un véhicule en modèle 3D texturé, à visualiser dans le navigateur puis à télécharger en GLB, OBJ, STL ou FBX.
 
@@ -147,7 +147,7 @@ La documentation interactive de l'API est sur `http://localhost:8000/docs`.
 ## Architecture
 
 ```
-image-to-3d/
+volumeo/
 ├─ backend/
 │  ├─ app/
 │  │  ├─ main.py            création de l'app FastAPI, sert aussi le frontend compilé

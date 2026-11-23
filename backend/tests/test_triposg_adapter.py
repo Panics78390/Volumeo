@@ -127,6 +127,7 @@ def _fake_triposg(monkeypatch):
     monkeypatch.setitem(sys.modules, "triposg.pipelines.pipeline_triposg", pl)
     monkeypatch.setattr(T.TripoSGGenerator, "availability", classmethod(lambda cls: (True, "")))
     monkeypatch.setattr(T.settings, "triposg_steps", 3)
+    monkeypatch.setattr(T, "model_path", lambda name: f"/cache/{name}")
     return calls
 
 
@@ -147,7 +148,7 @@ def test_triposg_generate_with_projection_colors(monkeypatch, car_photo):
     msgs = []
     res = T.TripoSGGenerator().generate(car_photo, GenerationOptions(mc_resolution=160, seed=0),
                                         lambda f, m: msgs.append((f, m)))
-    assert calls["octree"] == (8, 8) and calls["path"] == T.settings.triposg_model
+    assert calls["octree"] == (8, 8) and calls["path"] == f"/cache/{T.settings.triposg_model}"
     assert any("étape 3/3" in m for _, m in msgs)
     assert res.info["colors"] == "projection" and res.info["silhouette_iou"] > 0.9
     assert np.allclose(res.mesh.bounding_box.centroid, 0, atol=1e-6)
@@ -195,3 +196,14 @@ def test_triposg_not_default_without_gpu(monkeypatch):
     assert generators.default_generator_name() != "triposg"
     monkeypatch.setattr(generators, "_has_cuda", lambda: True)
     assert generators.default_generator_name() == "triposg"
+
+
+def test_model_path_downloads_hub_repo_first(monkeypatch, tmp_path):
+    """Un identifiant Hugging Face est d'abord téléchargé : diffusers refuse de charger
+    depuis le Hub les composants venant du paquet ``triposg`` (erreur vue sous Windows)."""
+    import huggingface_hub
+
+    seen = []
+    monkeypatch.setattr(huggingface_hub, "snapshot_download", lambda repo_id: seen.append(repo_id) or str(tmp_path))
+    assert T.model_path("VAST-AI/TripoSG") == str(tmp_path) and seen == ["VAST-AI/TripoSG"]
+    assert T.model_path(str(tmp_path)) == str(tmp_path) and len(seen) == 1, "dossier local utilisé tel quel"

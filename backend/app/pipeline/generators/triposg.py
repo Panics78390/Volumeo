@@ -239,6 +239,23 @@ def transfer_colors(src_vertices: np.ndarray, src_colors: np.ndarray, fit: ViewF
     return color_fn
 
 
+def model_path(name: str) -> str:
+    """Dossier local des poids TripoSG.
+
+    diffusers refuse de charger directement depuis le Hub un pipeline dont les
+    composants viennent d'un autre paquet (ici ``triposg.schedulers...``) :
+    on télécharge donc d'abord le dépôt complet, puis on charge le dossier local,
+    comme le script officiel de TripoSG.
+    """
+    from pathlib import Path
+
+    if Path(name).is_dir():
+        return name
+    from huggingface_hub import snapshot_download
+
+    return snapshot_download(repo_id=name)
+
+
 # ---------------------------------------------------------------------------
 # Générateur
 # ---------------------------------------------------------------------------
@@ -277,7 +294,7 @@ class TripoSGGenerator(Generator):
             dtype = torch.float16 if self._device.startswith("cuda") else torch.float32
             progress(0.02, "Chargement des poids TripoSG (premier lancement : téléchargement de plusieurs Go)")
             # Chargement direct en float16 sur GPU : évite un pic de ~6 Go de RAM en float32.
-            pipe = TripoSGPipeline.from_pretrained(settings.triposg_model, torch_dtype=dtype)
+            pipe = TripoSGPipeline.from_pretrained(model_path(settings.triposg_model), torch_dtype=dtype)
             pipe.set_progress_bar_config(disable=True)
             pipe = pipe.to(self._device)
             self._pipe = pipe

@@ -33,7 +33,7 @@ export interface ModelStats {
 }
 
 const clayMaterial = new THREE.MeshStandardMaterial({ color: '#b9bfcc', roughness: 0.75, metalness: 0.05 })
-const wireMaterial = new THREE.MeshBasicMaterial({ color: '#7c9cff', wireframe: true })
+const wireMaterial = new THREE.MeshBasicMaterial({ color: '#4da3ff', wireframe: true })
 const edgeMaterial = new THREE.MeshBasicMaterial({
   color: '#0b0d14',
   wireframe: true,

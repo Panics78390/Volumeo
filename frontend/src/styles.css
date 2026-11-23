@@ -7,9 +7,10 @@
   --border-strong: #353c55;
   --text: #e8eaf2;
   --muted: #8e96ad;
-  --accent: #7c9cff;
-  --accent-strong: #5f82f5;
-  --accent-ink: #0b1026;
+  --accent: #4da3ff;
+  --accent-strong: #2f7fe0;
+  --accent-ink: #1a0f00;
+  --brand: #ff8c1a;
   --ok: #4fd08a;
   --warn: #f2b755;
   --danger: #ff6b6b;
@@ -100,7 +101,16 @@ button:disabled {
   color: var(--accent);
 }
 
+.brand img {
+  border-radius: 8px;
+}
+
+.brand h1 span {
+  color: var(--brand);
+}
+
 .brand h1 {
+  text-transform: uppercase;
   font-size: 17px;
   font-weight: 650;
   letter-spacing: 0.01em;
@@ -357,7 +367,7 @@ select {
 
 .preset.active {
   border-color: var(--accent);
-  background: rgba(124, 156, 255, 0.1);
+  background: rgba(77, 163, 255, 0.1);
 }
 
 .segmented {
@@ -403,12 +413,12 @@ select {
 }
 
 .primary {
-  background: var(--accent);
+  background: var(--brand);
   color: var(--accent-ink);
 }
 
 .primary:hover:not(:disabled) {
-  background: #94aeff;
+  background: #ffa245;
 }
 
 .secondary {
